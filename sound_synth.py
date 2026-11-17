@@ -191,15 +191,25 @@ class SoundEngine:
 
         # ── Загрузка реальных высококачественных аудиофайлов (если доступны) ──
         base_dir = os.path.dirname(__file__)
-        real_fire = os.path.join(base_dir, 'assets', 'sounds', 'campfire_real.ogg')
-        if os.path.exists(real_fire):
-            try:
-                self._fire_loop = pygame.mixer.Sound(real_fire)
-            except Exception as e:
-                print(f"Failed to load campfire_real.ogg: {e}")
+        sounds_dir = os.path.join(base_dir, 'assets', 'sounds')
+        if os.path.isdir(sounds_dir):
+            for fname in os.listdir(sounds_dir):
+                if fname.endswith('.ogg') or fname.endswith('.wav'):
+                    sname = os.path.splitext(fname)[0]
+                    fpath = os.path.join(sounds_dir, fname)
+                    try:
+                        loaded_snd = pygame.mixer.Sound(fpath)
+                        self._cache[sname] = loaded_snd
+                        if sname == 'campfire_real':
+                            self._fire_loop = loaded_snd
+                        elif sname == 'lighter_real':
+                            self._cache['lighter_spin'] = loaded_snd
+                            self._cache['lighter_whoosh'] = loaded_snd
+                    except Exception as e:
+                        print(f"Failed to load {fname}: {e}")
 
-        self._forest_ambience = None
         real_forest = os.path.join(base_dir, 'assets', 'sounds', 'night_forest.ogg')
+        self._forest_ambience = None
         if os.path.exists(real_forest):
             try:
                 self._forest_ambience = pygame.mixer.Sound(real_forest)

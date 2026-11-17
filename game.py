@@ -11,6 +11,7 @@ from fire import FireSystem
 from events import WeatherSystem
 from sound_synth import sounds
 from ignition import MatchIgnition, LighterIgnition, FlintIgnition
+from textures import TextureManager
 from ui import (
     Button, Card, Bar, Panel, draw_text, draw_notification,
     draw_vignette, draw_grain, draw_woodcut_border, draw_scratchy_text,
@@ -180,35 +181,54 @@ class ForestScenery:
                 pygame.draw.circle(surface, (c, c, int(80 * glow)), (int(ff[0]), int(ff[1])), 2)
 
     def _draw_forest_entity(self, surface, time_sec, attention):
-        """Рисует жуткий рогатый силуэт между соснами, который подходит ближе при высоком внимании."""
-        ex = 520 + int(math.sin(time_sec * 0.8) * 4)
-        scale = 0.6 + 0.55 * attention
-        ey = int(345 - 85 * scale)
-        body_w = int(34 * scale)
-        body_h = int(95 * scale)
+        """Зловещее присутствие Хозяина Леса в стиле Inscryption:
+        Тёмный клубящийся туман между соснами и два немигающих горящих глаза в чаще."""
+        ex = 545 + int(math.sin(time_sec * 0.4) * 6)
+        ey = 285 + int(math.cos(time_sec * 0.3) * 3)
 
-        # Тёмный силуэт тела и головы
-        pygame.draw.ellipse(surface, (6, 8, 10), (ex - body_w // 2, ey, body_w, body_h))
-        head_r = int(14 * scale)
-        hx, hy = ex, ey - head_r // 2
-        pygame.draw.circle(surface, (6, 8, 10), (hx, hy), head_r)
+        # 1. Стелющийся чёрный туман между деревьями
+        mist_w = int(120 * attention)
+        mist_h = int(160 * attention)
+        if mist_w > 5 and mist_h > 5:
+            s = pygame.Surface((mist_w * 2, mist_h), pygame.SRCALPHA)
+            for i in range(4):
+                mo_x = int(math.sin(time_sec * 0.8 + i) * 12)
+                mo_y = int(math.cos(time_sec * 0.6 + i) * 8)
+                alpha = int(45 * attention * (1.0 - i * 0.2))
+                pygame.draw.ellipse(s, (4, 6, 8, alpha), (mist_w - 45 + mo_x, 15 + i * 25 + mo_y, 90, 75))
+            surface.blit(s, (ex - mist_w, ey - mist_h // 2))
 
-        # Оленьи рога
+        # 2. Искажённые теневые ветви/рога, тающие во тьме
         for side in (-1, 1):
-            bx = hx + side * int(8 * scale)
-            by = hy - int(8 * scale)
-            tip_x = bx + side * int(22 * scale)
-            tip_y = by - int(28 * scale)
-            pygame.draw.line(surface, (8, 10, 12), (bx, by), (tip_x, tip_y), max(2, int(3 * scale)))
-            pygame.draw.line(surface, (8, 10, 12), (bx + side * 6, by - 10), (bx + side * 4, by - 24), 2)
-            pygame.draw.line(surface, (8, 10, 12), (bx + side * 12, by - 16), (bx + side * 22, by - 18), 2)
+            for i in range(3):
+                bx = ex + side * (12 + i * 14)
+                by = ey - 15 - i * 18
+                tx = bx + side * int(18 * attention) + int(math.sin(time_sec * 1.2 + i) * 4)
+                ty = by - int(24 * attention)
+                pygame.draw.line(surface, (6, 8, 10), (bx, by), (tx, ty), max(2, int(3 * attention)))
 
-        # Гипнотические белые/красные глаза в стиле Inscryption
-        eye_off = max(4, int(5 * scale))
-        eye_r = max(2, int(3.5 * scale))
-        col = (255, int(255 * (1 - attention * 0.7)), int(255 * (1 - attention * 0.8)))
-        pygame.draw.circle(surface, col, (hx - eye_off, hy), eye_r)
-        pygame.draw.circle(surface, col, (hx + eye_off, hy), eye_r)
+        # 3. Немигающие глаза Хищника в стиле Leshy (Inscryption)
+        eye_dist = 14
+        blink = math.sin(time_sec * 0.5)
+        if blink > -0.92:
+            eye_glow_r = int(8 * attention)
+            eye_pupil_h = max(2, int(6 * attention * (0.8 + 0.2 * math.sin(time_sec * 3.0))))
+            for side in (-1, 1):
+                cur_ex = ex + side * eye_dist
+                cur_ey = ey
+
+                # Ореол света от глаз
+                if eye_glow_r > 1:
+                    glow_s = pygame.Surface((eye_glow_r * 4, eye_glow_r * 4), pygame.SRCALPHA)
+                    glow_alpha = int(90 * attention)
+                    pygame.draw.circle(glow_s, (220, 240, 255, glow_alpha), (eye_glow_r * 2, eye_glow_r * 2), eye_glow_r * 2)
+                    surface.blit(glow_s, (cur_ex - eye_glow_r * 2, cur_ey - eye_glow_r * 2), special_flags=pygame.BLEND_RGBA_ADD)
+
+                # Белое светящееся яблоко
+                col_eye = (245, 248, 255) if attention < 0.75 else (255, 120, 90)
+                pygame.draw.ellipse(surface, col_eye, (cur_ex - 4, cur_ey - 3, 8, 6))
+                # Вертикальный узкий хищный зрачок
+                pygame.draw.ellipse(surface, (15, 12, 18), (cur_ex - 1, cur_ey - eye_pupil_h // 2, 2, eye_pupil_h))
 
     def _draw_pines(self, surface, y_base, height, count, color, sway):
         step = SCREEN_W // count
@@ -278,6 +298,9 @@ class Game:
         self.fire     = FireSystem(FIRE_CX, FIRE_CY)
         self.weather  = WeatherSystem(SCREEN_W, SCREEN_H)
         self.scenery  = ForestScenery()
+
+        self.is_fullscreen = False
+        self.paused        = False
 
         self.selected_mat  = "pine"
         self.selected_tool = "match"
@@ -400,9 +423,26 @@ class Game:
         self.btn_back_to_prep = Button((SCREEN_W // 2 - 110, 490, 220, 42),
                                        "Выбрать другое снаряжение", size=FONT_SIZE_SMALL)
 
+        # ── Кнопки меню паузы (ESC) ──
+        self.btn_pause_resume  = Button((SCREEN_W // 2 - 125, 175, 250, 44), "Продолжить (ESC)")
+        self.btn_pause_fs      = Button((SCREEN_W // 2 - 125, 230, 250, 44), "Экран: ПОЛНЫЙ (F11)")
+        self.btn_pause_mute    = Button((SCREEN_W // 2 - 125, 285, 250, 44), "Звук: ВКЛ (M)")
+        self.btn_pause_restart = Button((SCREEN_W // 2 - 125, 340, 250, 44), "Начать заново")
+        self.btn_pause_prep    = Button((SCREEN_W // 2 - 125, 395, 250, 44), "Сменить снаряжение")
+        self.btn_pause_quit    = Button((SCREEN_W // 2 - 125, 450, 250, 44), "Выйти из игры")
+
+    def _toggle_fullscreen(self):
+        self.is_fullscreen = not self.is_fullscreen
+        if self.is_fullscreen:
+            self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN | pygame.SCALED)
+        else:
+            self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+        self.btn_pause_fs.label = "Экран: ОКОННЫЙ (F11)" if self.is_fullscreen else "Экран: ПОЛНЫЙ (F11)"
+
     def _toggle_mute(self):
         sounds.enabled = not sounds.enabled
         self.btn_mute.label = "Звук: ВКЛ (M)" if sounds.enabled else "Звук: ВЫКЛ (M)"
+        self.btn_pause_mute.label = "Звук: ВКЛ (M)" if sounds.enabled else "Звук: ВЫКЛ (M)"
 
     def _notify(self, text, duration=2.6, color=COLOR_TEXT_HIGHLIGHT):
         self.notif       = text
@@ -553,13 +593,23 @@ class Game:
                 continue
 
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_F11:
+                    self._toggle_fullscreen()
+                    continue
                 if event.key == pygame.K_ESCAPE:
-                    self.running = False
-                    return
+                    if self.state in (STATE_BURNING, STATE_IGNITION):
+                        self.paused = not self.paused
+                        continue
+                    elif self.paused:
+                        self.paused = False
+                        continue
+                    else:
+                        self.running = False
+                        return
                 if event.key == pygame.K_m:
                     self._toggle_mute()
 
-                if self.state == STATE_BURNING:
+                if self.state == STATE_BURNING and not self.paused:
                     if event.key == pygame.K_SPACE:
                         self.blowing = True
                     elif event.key == pygame.K_1:
@@ -578,6 +628,25 @@ class Game:
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_SPACE:
                     self.blowing = False
+
+            if self.paused:
+                if self.btn_pause_resume.handle_event(event):
+                    self.paused = False
+                elif self.btn_pause_fs.handle_event(event):
+                    self._toggle_fullscreen()
+                elif self.btn_pause_mute.handle_event(event):
+                    self._toggle_mute()
+                elif self.btn_pause_restart.handle_event(event):
+                    self.paused = False
+                    self._reset()
+                    self._go_ignition()
+                elif self.btn_pause_prep.handle_event(event):
+                    self.paused = False
+                    self._reset()
+                    self._go_prep()
+                elif self.btn_pause_quit.handle_event(event):
+                    self.running = False
+                continue
 
             if self.state == STATE_IGNITION and self.ignition_game:
                 self.ignition_game.handle_event(event)
@@ -679,6 +748,9 @@ class Game:
 
     # ── Update ────────────────────────────────────────────────────────────────
     def update(self, dt):
+        if self.paused:
+            return
+
         self.time_sec += dt
         self.weather.update(dt)
         self.fire.set_wind(self.weather.wind_strength)
@@ -831,6 +903,10 @@ class Game:
             alpha = min(255, int(self.notif_t * 6))
             draw_notification(self.screen, self.notif, 115, color=self.notif_color, alpha=alpha)
 
+        # Меню паузы и настроек на ESC
+        if self.paused:
+            self._draw_pause_menu()
+
         pygame.display.flip()
 
     def _draw_start(self):
@@ -954,47 +1030,32 @@ class Game:
 
         # 1. Береста (1)
         draw_slot(self.rect_tinder, f"Береста ({self.inv_tinder})", "[1] +15°", self.inv_tinder > 0)
-        for i in range(min(self.inv_tinder, 3)):
-            pygame.draw.ellipse(self.screen, (220, 200, 165), (self.rect_tinder.x + 14 + i * 14, self.rect_tinder.y + 14, 26, 15))
+        if self.inv_tinder > 0:
+            self.screen.blit(TextureManager.get('tinder', (44, 30)), (self.rect_tinder.centerx - 22, self.rect_tinder.y + 8))
 
         # 2. Хворост (2)
         draw_slot(self.rect_kindling, f"Хворост ({self.inv_kindling})", "[2] +18°", self.inv_kindling > 0)
-        for i in range(min(self.inv_kindling, 4)):
-            pygame.draw.line(self.screen, (140, 100, 55),
-                             (self.rect_kindling.x + 12, self.rect_kindling.y + 15 + i * 6),
-                             (self.rect_kindling.x + 74, self.rect_kindling.y + 22 - i * 4), 3)
+        if self.inv_kindling > 0:
+            self.screen.blit(TextureManager.get('kindling', (44, 30)), (self.rect_kindling.centerx - 22, self.rect_kindling.y + 8))
 
         # 3. Кора (3)
         draw_slot(self.rect_bark, f"Кора ({self.inv_bark})", "[3] +12°", self.inv_bark > 0)
-        for i in range(min(self.inv_bark, 3)):
-            bx = self.rect_bark.x + 16 + i * 14
-            by = self.rect_bark.y + 16
-            pygame.draw.arc(self.screen, (115, 75, 45), (bx, by, 22, 18), 0.2, 3.0, 4)
+        if self.inv_bark > 0:
+            self.screen.blit(TextureManager.get('bark', (44, 30)), (self.rect_bark.centerx - 22, self.rect_bark.y + 8))
 
         # 4. Мох (4)
         draw_slot(self.rect_moss, f"Мох ({self.inv_moss})", "[4] +8°", self.inv_moss > 0)
-        for i in range(min(self.inv_moss, 4)):
-            mx_pos = self.rect_moss.x + 18 + (i % 2) * 26
-            my_pos = self.rect_moss.y + 16 + (i // 2) * 12
-            pygame.draw.circle(self.screen, (60, 105, 45), (mx_pos, my_pos), 7)
-            pygame.draw.circle(self.screen, (85, 140, 60), (mx_pos + 2, my_pos - 2), 4)
+        if self.inv_moss > 0:
+            self.screen.blit(TextureManager.get('moss', (44, 30)), (self.rect_moss.centerx - 22, self.rect_moss.y + 8))
 
         # 5. Поленья (5)
         draw_slot(self.rect_logs, f"Поленья ({self.inv_logs})", "[5] Жар >25°", self.inv_logs > 0)
-        for i in range(min(self.inv_logs, 3)):
-            lx = self.rect_logs.x + 14 + i * 10
-            ly = self.rect_logs.y + 14 + (i % 2) * 8
-            pygame.draw.rect(self.screen, (145, 110, 70), (lx, ly, 44, 13), border_radius=3)
-            pygame.draw.circle(self.screen, (190, 165, 120), (lx + 44, ly + 6), 6)
+        if self.inv_logs > 0:
+            self.screen.blit(TextureManager.get('log', (48, 30)), (self.rect_logs.centerx - 24, self.rect_logs.y + 8))
 
         # 6. Кочерга
         draw_slot(self.rect_poker, "Кочерга", "Ворошить", True)
-        pygame.draw.line(self.screen, (130, 135, 145),
-                         (self.rect_poker.x + 16, self.rect_poker.y + 34),
-                         (self.rect_poker.x + 68, self.rect_poker.y + 14), 4)
-        pygame.draw.line(self.screen, (130, 135, 145),
-                         (self.rect_poker.x + 68, self.rect_poker.y + 14),
-                         (self.rect_poker.x + 74, self.rect_poker.y + 24), 4)
+        self.screen.blit(TextureManager.get('poker', (44, 30)), (self.rect_poker.centerx - 22, self.rect_poker.y + 8))
 
         # 7. Палочка (Рогатина для зефира)
         stick_sub = "С зефиркой!" if self.stick_has_marsh else "Пустая"
@@ -1011,12 +1072,8 @@ class Game:
         bag_sub = "Ткни палкой!" if need_skewer else "Пачка"
         draw_slot(self.rect_marsh_bag, f"Зефир ({self.inv_marshmallows})", bag_sub,
                   self.inv_marshmallows > 0, highlight_target=need_skewer)
-        # Рисуем пакетик и белые зефирки внутри
-        bx, by = self.rect_marsh_bag.x + 18, self.rect_marsh_bag.y + 10
-        pygame.draw.rect(self.screen, (180, 70, 85), (bx, by, 48, 26), border_radius=4)
-        pygame.draw.rect(self.screen, (230, 210, 215), (bx + 5, by + 3, 38, 18), border_radius=2)
-        for i in range(min(self.inv_marshmallows, 3)):
-            pygame.draw.circle(self.screen, (250, 248, 245), (bx + 12 + i * 11, by + 12), 4)
+        if self.inv_marshmallows > 0:
+            self.screen.blit(TextureManager.get('marsh_bag', (44, 30)), (self.rect_marsh_bag.centerx - 22, self.rect_marsh_bag.y + 8))
 
     def _get_marsh_color(self):
         r = self.marsh_roast
@@ -1034,34 +1091,14 @@ class Game:
             return
         mx, my = self.mouse_pos
 
-        if self.drag_item == 'tinder':
-            pygame.draw.ellipse(self.screen, (230, 210, 175), (mx - 22, my - 12, 44, 24))
-            draw_text(self.screen, "Брось в костёр", mx, my - 22, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
-
-        elif self.drag_item == 'kindling':
-            pygame.draw.line(self.screen, (150, 105, 60), (mx - 35, my - 8), (mx + 35, my + 8), 5)
-            pygame.draw.line(self.screen, (135, 95, 50), (mx - 30, my + 10), (mx + 32, my - 10), 4)
-            draw_text(self.screen, "Брось в костёр", mx, my - 24, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
-
-        elif self.drag_item == 'bark':
-            pygame.draw.arc(self.screen, (120, 80, 50), (mx - 28, my - 16, 56, 32), 0.2, 3.0, 6)
-            pygame.draw.arc(self.screen, (85, 55, 30), (mx - 24, my - 12, 48, 24), 0.2, 3.0, 4)
-            draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
-
-        elif self.drag_item == 'moss':
-            pygame.draw.circle(self.screen, (55, 100, 40), (mx - 10, my), 14)
-            pygame.draw.circle(self.screen, (70, 120, 50), (mx + 8, my - 4), 12)
-            pygame.draw.circle(self.screen, (85, 145, 60), (mx, my + 6), 11)
-            draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
-
-        elif self.drag_item == 'log':
-            pygame.draw.rect(self.screen, (150, 115, 75), (mx - 40, my - 12, 80, 24), border_radius=5)
-            pygame.draw.circle(self.screen, (200, 175, 130), (mx + 40, my), 11)
+        if self.drag_item in ('tinder', 'kindling', 'bark', 'moss', 'log'):
+            tex = TextureManager.get(self.drag_item, (52, 34))
+            self.screen.blit(tex, (mx - 26, my - 17))
             draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
         elif self.drag_item == 'poker':
-            pygame.draw.line(self.screen, (150, 155, 165), (mx + 95, my + 75), (mx, my), 5)
-            pygame.draw.line(self.screen, (200, 120, 60), (mx, my), (mx - 12, my + 10), 5)
+            tex = TextureManager.get('poker', (56, 38))
+            self.screen.blit(tex, (mx - 15, my - 15))
             draw_text(self.screen, "Води по углям туда-сюда!", mx, my - 22, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
         elif self.drag_item == 'stick':
@@ -1088,6 +1125,27 @@ class Game:
                     status = f"Жарится: {int((self.marsh_roast / 0.45) * 100)}% (держи над пламенем)"
                     sc = COLOR_TEXT_HIGHLIGHT
                 draw_text(self.screen, status, mx, my - 25, size=FONT_SIZE_TINY, color=sc, anchor="center")
+
+    def _draw_pause_menu(self):
+        """Отрисовка меню паузы и настроек на ESC."""
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 205))
+        self.screen.blit(overlay, (0, 0))
+
+        # Деревянная рамка меню паузы
+        menu_panel = Panel((SCREEN_W // 2 - 150, 110, 300, 395), "")
+        menu_panel.draw(self.screen)
+        draw_woodcut_border(self.screen, menu_panel.rect, (130, 95, 55))
+
+        draw_text(self.screen, "ПАУЗА / НАСТРОЙКИ", SCREEN_W // 2, 135,
+                  size=FONT_SIZE_MEDIUM, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
+
+        self.btn_pause_resume.draw(self.screen)
+        self.btn_pause_fs.draw(self.screen)
+        self.btn_pause_mute.draw(self.screen)
+        self.btn_pause_restart.draw(self.screen)
+        self.btn_pause_prep.draw(self.screen)
+        self.btn_pause_quit.draw(self.screen)
 
     def _draw_end(self, win: bool):
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
