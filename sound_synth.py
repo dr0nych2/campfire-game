@@ -87,23 +87,16 @@ class SoundEngine:
 
         # Breath & Steam
         if 'blow' in self._cache:
-            self._cache['blow'].set_volume(0.65)
+            self._cache['blow'].set_volume(0.70)
         if 'steam_hiss' in self._cache:
             self._cache['steam_hiss'].set_volume(0.55)
+        if 'wind_rustle' in self._cache:
+            self._cache['wind_rustle'].set_volume(0.35)
 
         # Main Real Campfire Ambient Loop (60 seconds)
         if 'campfire_real' in self._cache:
             self._fire_loop = self._cache['campfire_real']
             self._fire_loop.set_volume(0.0)
-
-        # Forest background night crickets
-        if 'crickets' in self._cache:
-            self._forest_ambience = self._cache['crickets']
-            try:
-                self._forest_ambience.set_volume(0.18)
-                self._forest_ambience.play(-1)
-            except Exception:
-                pass
 
     def play(self, sound_name):
         """Play a real one-shot acoustic sound by key."""
@@ -165,6 +158,12 @@ class SoundEngine:
             self._last_crackle_time = 0.0
             if random.random() < 0.80:
                 self.play_crackle()
+
+        # Natural soft wind rustle in the trees
+        self._ambient_timer -= dt
+        if self._ambient_timer <= 0:
+            self._ambient_timer = random.uniform(16.0, 32.0)
+            self.play('wind_rustle')
 
 
 # Global sound engine instance

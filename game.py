@@ -182,53 +182,31 @@ class ForestScenery:
 
     def _draw_forest_entity(self, surface, time_sec, attention):
         """Зловещее присутствие Хозяина Леса в стиле Inscryption:
-        Тёмный клубящийся туман между соснами и два немигающих горящих глаза в чаще."""
-        ex = 545 + int(math.sin(time_sec * 0.4) * 6)
-        ey = 285 + int(math.cos(time_sec * 0.3) * 3)
+        Теневой силуэт с ветвистыми рогами и немигающими глазами между соснами."""
+        if attention < 0.05:
+            return
 
-        # 1. Стелющийся чёрный туман между деревьями
-        mist_w = int(120 * attention)
-        mist_h = int(160 * attention)
-        if mist_w > 5 and mist_h > 5:
-            s = pygame.Surface((mist_w * 2, mist_h), pygame.SRCALPHA)
-            for i in range(4):
-                mo_x = int(math.sin(time_sec * 0.8 + i) * 12)
-                mo_y = int(math.cos(time_sec * 0.6 + i) * 8)
-                alpha = int(45 * attention * (1.0 - i * 0.2))
-                pygame.draw.ellipse(s, (4, 6, 8, alpha), (mist_w - 45 + mo_x, 15 + i * 25 + mo_y, 90, 75))
-            surface.blit(s, (ex - mist_w, ey - mist_h // 2))
+        frame = min(5, int(attention * 6))
+        spirit_tex = TextureManager.get(f'forest_spirit_{frame + 1}')
+        if not spirit_tex:
+            return
 
-        # 2. Искажённые теневые ветви/рога, тающие во тьме
-        for side in (-1, 1):
-            for i in range(3):
-                bx = ex + side * (12 + i * 14)
-                by = ey - 15 - i * 18
-                tx = bx + side * int(18 * attention) + int(math.sin(time_sec * 1.2 + i) * 4)
-                ty = by - int(24 * attention)
-                pygame.draw.line(surface, (6, 8, 10), (bx, by), (tx, ty), max(2, int(3 * attention)))
+        ex = 540 + int(math.sin(time_sec * 0.35) * 4)
+        ey = 160 + int(math.cos(time_sec * 0.25) * 3)
 
-        # 3. Немигающие глаза Хищника в стиле Leshy (Inscryption)
-        eye_dist = 14
-        blink = math.sin(time_sec * 0.5)
-        if blink > -0.92:
-            eye_glow_r = int(8 * attention)
-            eye_pupil_h = max(2, int(6 * attention * (0.8 + 0.2 * math.sin(time_sec * 3.0))))
-            for side in (-1, 1):
-                cur_ex = ex + side * eye_dist
-                cur_ey = ey
+        # Alpha fade in based on attention
+        alpha = int(min(255, max(40, attention * 300)))
+        spirit_s = spirit_tex.copy()
+        spirit_s.set_alpha(alpha)
+        surface.blit(spirit_s, (ex, ey))
 
-                # Ореол света от глаз
-                if eye_glow_r > 1:
-                    glow_s = pygame.Surface((eye_glow_r * 4, eye_glow_r * 4), pygame.SRCALPHA)
-                    glow_alpha = int(90 * attention)
-                    pygame.draw.circle(glow_s, (220, 240, 255, glow_alpha), (eye_glow_r * 2, eye_glow_r * 2), eye_glow_r * 2)
-                    surface.blit(glow_s, (cur_ex - eye_glow_r * 2, cur_ey - eye_glow_r * 2), special_flags=pygame.BLEND_RGBA_ADD)
-
-                # Белое светящееся яблоко
-                col_eye = (245, 248, 255) if attention < 0.75 else (255, 120, 90)
-                pygame.draw.ellipse(surface, col_eye, (cur_ex - 4, cur_ey - 3, 8, 6))
-                # Вертикальный узкий хищный зрачок
-                pygame.draw.ellipse(surface, (15, 12, 18), (cur_ex - 1, cur_ey - eye_pupil_h // 2, 2, eye_pupil_h))
+        # Additional eerie glow when enraged
+        if attention > 0.70:
+            glow_r = int(40 * (attention - 0.7) / 0.3)
+            if glow_r > 2:
+                gs = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
+                pygame.draw.circle(gs, (80, 220, 255, 60), (glow_r, glow_r), glow_r)
+                surface.blit(gs, (ex + 68 - glow_r, ey + 40 - glow_r), special_flags=pygame.BLEND_RGBA_ADD)
 
     def _draw_pines(self, surface, y_base, height, count, color, sway):
         step = SCREEN_W // count
@@ -1102,29 +1080,40 @@ class Game:
             draw_text(self.screen, "Води по углям туда-сюда!", mx, my - 22, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
         elif self.drag_item == 'stick':
-            # Рисуем деревянную палочку-рогатину
-            pygame.draw.line(self.screen, (170, 135, 85), (mx + 90, my + 70), (mx, my), 4)
-            pygame.draw.line(self.screen, (170, 135, 85), (mx, my), (mx - 8, my - 4), 2)
-            pygame.draw.line(self.screen, (170, 135, 85), (mx, my), (mx - 4, my - 9), 2)
-
             if not self.stick_has_marsh:
+                stick_tex = TextureManager.get('stick', (120, 36))
+                if stick_tex:
+                    self.screen.blit(stick_tex, (mx - 60, my - 18))
+                else:
+                    pygame.draw.line(self.screen, (170, 135, 85), (mx + 80, my + 60), (mx, my), 4)
                 draw_text(self.screen, "Палочка пустая! Наведи на ПАЧКУ ЗЕФИРА справа внизу, чтобы наколоть!",
-                          mx, my - 24, size=FONT_SIZE_TINY, color=(130, 240, 150), anchor="center")
+                          mx, my - 26, size=FONT_SIZE_TINY, color=(130, 240, 150), anchor="center", shadow=True)
             else:
-                m_col = self._get_marsh_color()
-                pygame.draw.rect(self.screen, m_col, (mx - 12, my - 10, 24, 18), border_radius=5)
-                pygame.draw.rect(self.screen, (80, 60, 40), (mx - 12, my - 10, 24, 18), width=1, border_radius=5)
-
-                if self.marsh_roast > 0.95:
+                if self.marsh_roast >= 0.95:
+                    stage = 4
                     status = "СГОРЕЛА! Нажми ПКМ, чтобы стряхнуть уголёк с палочки"
                     sc = COLOR_FAIL
-                elif self.marsh_roast >= 0.45:
-                    status = f"ГОТОВА ({int(self.marsh_roast * 100)}%)! Нажми ПКМ, чтобы съесть!"
+                elif self.marsh_roast >= 0.65:
+                    stage = 3
+                    status = f"КАРАМЕЛЬНАЯ ({int(self.marsh_roast * 100)}%)! Нажми ПКМ, чтобы съесть!"
+                    sc = COLOR_WIN
+                elif self.marsh_roast >= 0.35:
+                    stage = 2
+                    status = f"ЗОЛОТИСТАЯ ({int(self.marsh_roast * 100)}%)! Нажми ПКМ, чтобы съесть!"
                     sc = COLOR_WIN
                 else:
-                    status = f"Жарится: {int((self.marsh_roast / 0.45) * 100)}% (держи над пламенем)"
+                    stage = 1
+                    status = f"Жарится: {int((self.marsh_roast / 0.35) * 100)}% (держи над пламенем)"
                     sc = COLOR_TEXT_HIGHLIGHT
-                draw_text(self.screen, status, mx, my - 25, size=FONT_SIZE_TINY, color=sc, anchor="center")
+
+                tex = TextureManager.get(f'marshmallow_{stage}', (110, 68))
+                if tex:
+                    self.screen.blit(tex, (mx - 55, my - 34))
+                else:
+                    m_col = self._get_marsh_color()
+                    pygame.draw.rect(self.screen, m_col, (mx - 12, my - 10, 24, 18), border_radius=5)
+
+                draw_text(self.screen, status, mx, my - 28, size=FONT_SIZE_TINY, color=sc, anchor="center", shadow=True)
 
     def _draw_pause_menu(self):
         """Отрисовка меню паузы и настроек на ESC."""
