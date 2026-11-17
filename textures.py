@@ -13,24 +13,37 @@ class TextureManager:
     _cache = {}
 
     @classmethod
-    def get(cls, name: str, default_size=(48, 48)) -> pygame.Surface:
-        """Returns loaded PNG texture from assets/textures/ or generated retro pixel-art sprite."""
-        if name in cls._cache:
-            return cls._cache[name]
+    def get(cls, name: str, size=None) -> pygame.Surface:
+        """Returns loaded PNG texture from assets/textures/ (scaled if size is given) or generated retro sprite."""
+        cache_key = (name, size)
+        if cache_key in cls._cache:
+            return cls._cache[cache_key]
 
-        # 1. Попытка загрузить пользовательскую текстуру PNG
-        png_path = os.path.join(TEXTURES_DIR, f"{name}.png")
-        if os.path.isfile(png_path):
-            try:
-                surf = pygame.image.load(png_path).convert_alpha()
-                cls._cache[name] = surf
-                return surf
-            except Exception as e:
-                print(f"Failed to load {png_path}: {e}")
+        # Raw texture load
+        if name not in cls._cache:
+            png_path = os.path.join(TEXTURES_DIR, f"{name}.png")
+            if os.path.isfile(png_path):
+                try:
+                    cls._cache[name] = pygame.image.load(png_path).convert_alpha()
+                except Exception as e:
+                    print(f"Failed to load {png_path}: {e}")
+                    cls._cache[name] = None
+            else:
+                cls._cache[name] = None
 
-        # 2. Если файла нет — создаём красивый детальный ретро пиксель-арт спрайт
-        surf = cls._generate_retro_sprite(name, default_size)
-        cls._cache[name] = surf
+        raw = cls._cache.get(name)
+        if raw is not None:
+            if size is not None and raw.get_size() != size:
+                surf = pygame.transform.smoothscale(raw, size)
+            else:
+                surf = raw
+            cls._cache[cache_key] = surf
+            return surf
+
+        # Fallback to generated retro sprite
+        fallback_size = size or (48, 48)
+        surf = cls._generate_retro_sprite(name, fallback_size)
+        cls._cache[cache_key] = surf
         return surf
 
     @classmethod

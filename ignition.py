@@ -8,6 +8,7 @@ import pygame
 import random
 import math
 from sound_synth import sounds
+from textures import TextureManager
 from ui import draw_text, FONT_SIZE_LARGE, FONT_SIZE_MEDIUM, FONT_SIZE_SMALL, FONT_SIZE_TINY
 
 TINDER_RECT = pygame.Rect(320, 360, 160, 90)
@@ -187,29 +188,42 @@ class MatchIgnition(BaseIgnition):
         self.flame_particles = alive_flames
 
     def draw(self, surface):
-        # 1. Matchbox
+        # 1. Matchbox with texture
         bx, by, bw, bh = self.box_rect
-        pygame.draw.rect(surface, (45, 55, 75), self.box_rect, border_radius=8)
-        pygame.draw.rect(surface, (70, 85, 115), self.box_rect, width=2, border_radius=8)
-        draw_text(surface, "СПИЧКИ", bx + bw // 2, by + 12, size=FONT_SIZE_SMALL,
-                  color=(220, 225, 235), anchor="midtop")
+        box_tex = TextureManager.get('matchbox')
+        if box_tex:
+            scaled_box = pygame.transform.smoothscale(box_tex, (bw, bh))
+            surface.blit(scaled_box, (bx, by))
+        else:
+            pygame.draw.rect(surface, (45, 55, 75), self.box_rect, border_radius=8)
+            pygame.draw.rect(surface, (70, 85, 115), self.box_rect, width=2, border_radius=8)
+            draw_text(surface, "СПИЧКИ", bx + bw // 2, by + 12, size=FONT_SIZE_SMALL,
+                      color=(220, 225, 235), anchor="midtop")
 
-        # Striker strip
+        # Striker strip zone indicator
         sx, sy, sw, sh = self.striker_rect
-        pygame.draw.rect(surface, (85, 45, 30), self.striker_rect, border_radius=4)
-        for i in range(sx + 5, sx + sw - 5, 8):
-            pygame.draw.line(surface, (115, 60, 40), (i, sy + 3), (i + 4, sy + sh - 3), 1)
+        # Subtle highlight for striker area
+        s_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        s_surf.fill((160, 90, 40, 45))
+        pygame.draw.rect(s_surf, (220, 150, 70, 120), (0, 0, sw, sh), width=1, border_radius=4)
+        surface.blit(s_surf, (sx, sy))
         draw_text(surface, "ПОЛОСА ЧЕРКАША (чиркай здесь)", sx + sw // 2, sy + sh // 2,
-                  size=FONT_SIZE_TINY, color=(200, 160, 140), anchor="center")
+                  size=FONT_SIZE_TINY, color=(255, 220, 180), anchor="center", shadow=True)
 
-        # 2. Tinder nest indicator
+        # 2. Tinder nest indicator with texture
         tx, ty, tw, th = TINDER_RECT
-        pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
-        pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
-        draw_text(surface, "РАСТОПКА КОСТРА", tx + tw // 2, ty + 12, size=FONT_SIZE_TINY,
-                  color=(230, 190, 120), anchor="midtop")
-        draw_text(surface, "(подноси огонь сюда)", tx + tw // 2, ty + 30, size=FONT_SIZE_TINY,
-                  color=(160, 130, 85), anchor="midtop")
+        nest_tex = TextureManager.get('tinder_nest')
+        if nest_tex:
+            scaled_nest = pygame.transform.smoothscale(nest_tex, (tw, th))
+            surface.blit(scaled_nest, (tx, ty))
+        else:
+            pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
+            pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
+
+        draw_text(surface, "ГНЕЗДО РАСТОПКИ", tx + tw // 2, ty - 18, size=FONT_SIZE_SMALL,
+                  color=(255, 220, 150), anchor="midtop", shadow=True)
+        draw_text(surface, "(подноси огонь сюда)", tx + tw // 2, ty + th + 4, size=FONT_SIZE_TINY,
+                  color=(200, 170, 110), anchor="midtop", shadow=True)
 
         # 3. Flame particles
         for p in self.flame_particles:
@@ -382,14 +396,20 @@ class LighterIgnition(BaseIgnition):
         self.flame_particles = alive_flames
 
     def draw(self, surface):
-        # 1. Tinder nest
+        # 1. Tinder nest indicator with texture
         tx, ty, tw, th = TINDER_RECT
-        pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
-        pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
-        draw_text(surface, "РАСТОПКА КОСТРА", tx + tw // 2, ty + 12, size=FONT_SIZE_TINY,
-                  color=(230, 190, 120), anchor="midtop")
-        draw_text(surface, "(подноси огонь сюда)", tx + tw // 2, ty + 30, size=FONT_SIZE_TINY,
-                  color=(160, 130, 85), anchor="midtop")
+        nest_tex = TextureManager.get('tinder_nest')
+        if nest_tex:
+            scaled_nest = pygame.transform.smoothscale(nest_tex, (tw, th))
+            surface.blit(scaled_nest, (tx, ty))
+        else:
+            pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
+            pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
+
+        draw_text(surface, "ГНЕЗДО РАСТОПКИ", tx + tw // 2, ty - 18, size=FONT_SIZE_SMALL,
+                  color=(255, 220, 150), anchor="midtop", shadow=True)
+        draw_text(surface, "(подноси огонь сюда)", tx + tw // 2, ty + th + 4, size=FONT_SIZE_TINY,
+                  color=(200, 170, 110), anchor="midtop", shadow=True)
 
         # 2. Sparks
         for s in self.sparks:
@@ -403,25 +423,32 @@ class LighterIgnition(BaseIgnition):
                 col = (120, 180, 255) if p[4] > 0.2 else (255, 200, 40)
                 pygame.draw.circle(surface, col, (int(p[0]), int(p[1])), sz)
 
-        # 4. Lighter body
+        # 4. Lighter body with texture
         lx, ly = self.lighter_pos
-        body_col = (190, 150, 40) if self.material_key == "birch" else (70, 75, 85)
-        # Metal case
-        pygame.draw.rect(surface, body_col, (lx - 25, ly - 35, 50, 85), border_radius=6)
-        pygame.draw.rect(surface, (220, 220, 230), (lx - 25, ly - 35, 50, 85), width=2, border_radius=6)
-        # Hood / nozzle
-        pygame.draw.rect(surface, (140, 140, 150), (lx - 20, ly - 50, 22, 16), border_radius=2)
-        # Flint wheel
-        wheel_col = (230, 210, 50) if self.spark_timer > 0 else (180, 180, 190)
-        pygame.draw.circle(surface, wheel_col, (lx + 8, ly - 42), 8)
-        pygame.draw.circle(surface, (90, 90, 100), (lx + 8, ly - 42), 8, 2)
-        # Gas thumb button
-        btn_y = ly - 36 if self.holding_gas else ly - 42
-        pygame.draw.rect(surface, (200, 50, 40), (lx + 2, btn_y, 16, 8), border_radius=2)
+        lighter_tex = TextureManager.get('lighter')
+        if lighter_tex:
+            # Sliced lighter is 75x94
+            lw, lh = 60, 75
+            scaled_l = pygame.transform.smoothscale(lighter_tex, (lw, lh))
+            surface.blit(scaled_l, (lx - lw // 2, ly - lh // 2))
+        else:
+            body_col = (190, 150, 40) if self.material_key == "birch" else (70, 75, 85)
+            # Metal case
+            pygame.draw.rect(surface, body_col, (lx - 25, ly - 35, 50, 85), border_radius=6)
+            pygame.draw.rect(surface, (220, 220, 230), (lx - 25, ly - 35, 50, 85), width=2, border_radius=6)
+            # Hood / nozzle
+            pygame.draw.rect(surface, (140, 140, 150), (lx - 20, ly - 50, 22, 16), border_radius=2)
+            # Flint wheel
+            wheel_col = (230, 210, 50) if self.spark_timer > 0 else (180, 180, 190)
+            pygame.draw.circle(surface, wheel_col, (lx + 8, ly - 42), 8)
+            pygame.draw.circle(surface, (90, 90, 100), (lx + 8, ly - 42), 8, 2)
+            # Gas thumb button
+            btn_y = ly - 36 if self.holding_gas else ly - 42
+            pygame.draw.rect(surface, (200, 50, 40), (lx + 2, btn_y, 16, 8), border_radius=2)
 
         # Fuel gauge
-        pygame.draw.rect(surface, (30, 30, 30), (lx - 18, ly + 25, 36, 6), border_radius=2)
-        pygame.draw.rect(surface, (60, 180, 240), (lx - 18, ly + 25, int(36 * self.fuel), 6), border_radius=2)
+        pygame.draw.rect(surface, (30, 30, 30), (lx - 20, ly + 42, 40, 6), border_radius=2)
+        pygame.draw.rect(surface, (60, 180, 240), (lx - 20, ly + 42, int(40 * self.fuel), 6), border_radius=2)
 
         draw_text(surface, self.hint, 400, 560, size=FONT_SIZE_SMALL,
                   color=self.hint_color, anchor="center")
@@ -545,34 +572,45 @@ class FlintIgnition(BaseIgnition):
         self.smoke_particles = alive_smoke
 
     def draw(self, surface):
-        # 1. Tinder nest
+        # 1. Tinder nest indicator with texture
         tx, ty, tw, th = TINDER_RECT
-        pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
-        pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
+        nest_tex = TextureManager.get('tinder_nest')
+        if nest_tex:
+            scaled_nest = pygame.transform.smoothscale(nest_tex, (tw, th))
+            surface.blit(scaled_nest, (tx, ty))
+        else:
+            pygame.draw.rect(surface, (65, 48, 28), TINDER_RECT, border_radius=8)
+            pygame.draw.rect(surface, (130, 95, 50), TINDER_RECT, width=2, border_radius=8)
 
         # Ember glow in tinder
         if self.ember_ready:
-            glow_r = int(12 + 18 * self.blown_ratio)
+            glow_r = int(14 + 20 * self.blown_ratio)
             s = pygame.Surface((glow_r * 2, glow_r * 2), pygame.SRCALPHA)
             pygame.draw.circle(s, (255, 90, 10, 180), (glow_r, glow_r), glow_r)
             pygame.draw.circle(s, (255, 230, 80, 230), (glow_r, glow_r), glow_r // 2)
             surface.blit(s, (tx + tw // 2 - glow_r, ty + th // 2 - glow_r))
 
-        draw_text(surface, "ГНЕЗДО РАСТОПКИ (ТРУТ)", tx + tw // 2, ty + 10,
-                  size=FONT_SIZE_TINY, color=(230, 190, 120), anchor="midtop")
+        draw_text(surface, "ГНЕЗДО РАСТОПКИ (ТРУТ)", tx + tw // 2, ty - 18,
+                  size=FONT_SIZE_SMALL, color=(255, 220, 150), anchor="midtop", shadow=True)
 
-        # 2. Flint stone (кремень)
-        pygame.draw.polygon(surface, (75, 75, 80), [(370, 310), (430, 310), (415, 345), (385, 345)])
-        pygame.draw.polygon(surface, (120, 120, 130), [(370, 310), (430, 310), (415, 345), (385, 345)], 2)
-        draw_text(surface, "КРЕМЕНЬ", 400, 320, size=FONT_SIZE_TINY,
-                  color=(200, 205, 215), anchor="center")
+        # 2. Flint stone (кремень) with texture
+        flint_tex = TextureManager.get('flint')
+        if flint_tex:
+            fw, fh = 90, 68
+            scaled_flint = pygame.transform.smoothscale(flint_tex, (fw, fh))
+            surface.blit(scaled_flint, (400 - fw // 2, 315 - fh // 2))
+        else:
+            pygame.draw.polygon(surface, (75, 75, 80), [(370, 310), (430, 310), (415, 345), (385, 345)])
+            pygame.draw.polygon(surface, (120, 120, 130), [(370, 310), (430, 310), (415, 345), (385, 345)], 2)
+            draw_text(surface, "КРЕМЕНЬ", 400, 320, size=FONT_SIZE_TINY,
+                      color=(200, 205, 215), anchor="center")
 
         # 3. Steel striker in hand (кресало)
         sx, sy = self.striker_pos
-        pygame.draw.rect(surface, (180, 185, 195), (sx - 28, sy - 10, 56, 18), border_radius=4)
-        pygame.draw.rect(surface, (230, 235, 245), (sx - 28, sy - 10, 56, 18), width=2, border_radius=4)
+        pygame.draw.rect(surface, (160, 165, 175), (sx - 32, sy - 12, 64, 24), border_radius=6)
+        pygame.draw.rect(surface, (230, 235, 245), (sx - 32, sy - 12, 64, 24), width=2, border_radius=6)
         draw_text(surface, "КРЕСАЛО", sx, sy - 1, size=FONT_SIZE_TINY,
-                  color=(40, 45, 55), anchor="center")
+                  color=(20, 25, 35), anchor="center")
 
         # 4. Sparks
         for s in self.sparks:

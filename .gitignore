@@ -16,3 +16,4 @@ env/
 dist/
 build/
 *.spec
+scratch/

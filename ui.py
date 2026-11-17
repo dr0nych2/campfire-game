@@ -145,7 +145,22 @@ class Button:
 
         pygame.draw.rect(surface, bg,  self.rect, border_radius=BTN_CORNER_RADIUS)
         pygame.draw.rect(surface, bc,  self.rect, width=2, border_radius=BTN_CORNER_RADIUS)
-        cx = self.rect.centerx
+        
+        # Tool button icon if tag is present
+        tag_to_tex = {'match': 'matchbox', 'lighter': 'lighter', 'flint': 'flint'}
+        icon_w = 0
+        if hasattr(self, 'tag') and self.tag in tag_to_tex:
+            try:
+                from textures import TextureManager
+                tex = TextureManager.get(tag_to_tex[self.tag])
+                if tex:
+                    icon_w = 32
+                    thumb = pygame.transform.smoothscale(tex, (28, 22))
+                    surface.blit(thumb, (self.rect.left + 10, self.rect.centery - 11))
+            except Exception:
+                pass
+
+        cx = self.rect.centerx + (14 if icon_w else 0)
         cy = self.rect.centery
         draw_text(surface, self.label, cx, cy, size=self.size,
                   color=tc, anchor="center")
@@ -178,6 +193,17 @@ class Card:
             (55, 40, 20) if self.hovered else COLOR_PANEL)
         pygame.draw.rect(surface, bg_color,  self.rect, border_radius=CARD_CORNER)
         pygame.draw.rect(surface, border_color, self.rect, width=2, border_radius=CARD_CORNER)
+
+        # Draw item icon if available
+        if self.tag:
+            try:
+                from textures import TextureManager
+                tex = TextureManager.get(self.tag)
+                if tex:
+                    thumb = pygame.transform.smoothscale(tex, (58, 38))
+                    surface.blit(thumb, (self.rect.right - 68, self.rect.top + 10))
+            except Exception:
+                pass
 
         tx = self.rect.x + CARD_PADDING
         ty = self.rect.y + CARD_PADDING

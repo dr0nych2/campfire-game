@@ -433,10 +433,10 @@ class Game:
 
     def _toggle_fullscreen(self):
         self.is_fullscreen = not self.is_fullscreen
-        if self.is_fullscreen:
-            self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), pygame.FULLSCREEN | pygame.SCALED)
-        else:
-            self.screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+        try:
+            pygame.display.toggle_fullscreen()
+        except Exception as e:
+            print(f"Fullscreen toggle error: {e}")
         self.btn_pause_fs.label = "Экран: ОКОННЫЙ (F11)" if self.is_fullscreen else "Экран: ПОЛНЫЙ (F11)"
 
     def _toggle_mute(self):
