@@ -266,6 +266,15 @@ class FireSystem:
             col = p.color()
             pygame.draw.circle(self._fire_surf, (col[0], col[1], col[2], 240), (int(p.x), int(p.y)), p.size)
 
+        # 6. Мерцающие блики на камнях вокруг костра
+        if self.temperature > 10:
+            for ox in (-50, 50):
+                if random.random() < 0.4:
+                    bx = self.cx + ox + random.randint(-4, 4)
+                    by = self.cy + 8 + random.randint(-2, 2)
+                    stone_alpha = random.randint(60, 160)
+                    pygame.draw.circle(self._fire_surf, (255, 190, 100, stone_alpha), (bx, by), random.randint(2, 4))
+
         surface.blit(self._fire_surf, (0, 0))
 
     def draw_ambient_light(self, surface):
@@ -284,3 +293,10 @@ class FireSystem:
                 pygame.draw.circle(self._light_surf, (255, 140, 20, step_alpha), (self.cx, self.cy - 10), r)
 
         surface.blit(self._light_surf, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
+        # Оранжевый отблеск на нижних стволах деревьев (подсветка снизу костром)
+        trunk_alpha = int(30 * temp_ratio)
+        if trunk_alpha > 2:
+            trunk_surf = pygame.Surface((surface.get_width(), 45), pygame.SRCALPHA)
+            trunk_surf.fill((255, 110, 20, trunk_alpha))
+            surface.blit(trunk_surf, (0, 300))

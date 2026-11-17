@@ -4,6 +4,7 @@ All magic numbers are defined as named constants at the top.
 """
 import pygame
 import math
+import random
 
 # ── Colours ───────────────────────────────────────────────────────────────────
 COLOR_BG_DARK        = (20,  15,  10)
@@ -38,6 +39,11 @@ FONT_SIZE_LARGE      = 36
 FONT_SIZE_MEDIUM     = 22
 FONT_SIZE_SMALL      = 16
 FONT_SIZE_TINY       = 13
+
+# ── Inscryption effects: pre-allocated surfaces ───────────────────────────────
+_vignette_surf = None   # created once on first call, reused every frame
+_grain_surf    = None   # pre-allocated grain surface
+_grain_frame   = 0      # counts rendered frames so we regenerate grain every 3
 
 
 class FontCache:
@@ -260,3 +266,128 @@ def draw_notification(surface, text, y, color=COLOR_TEXT_MAIN,
     sh.set_alpha(alpha)
     surface.blit(sh, (r.x + 2, r.y + 2))
     surface.blit(surf, r)
+
+
+# ── Inscryption-style visual effects ─────────────────────────────────────────
+
+def draw_vignette(surface):
+    """Рисует тёмную виньетку по краям экрана (Inscryption-стиль).
+    Поверхность создаётся один раз и кешируется для производительности."""
+    global _vignette_surf
+    w, h = surface.get_size()
+
+    if _vignette_surf is None or _vignette_surf.get_size() != (w, h):
+        _vignette_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        _vignette_surf.fill((0, 0, 0, 0))
+
+        # Рисуем тёмные углы — несколько концентрических эллипсов от краёв к центру
+        cx, cy = w // 2, h // 2
+        steps = 32
+        for i in range(steps, 0, -1):
+            ratio = i / steps
+            # Альфа убывает к центру (максимум у краёв)
+            alpha = int(200 * (ratio ** 2.2))
+            # Прямоугольник чуть больше экрана уменьшается к центру
+            margin_x = int(cx * (1.0 - ratio))
+            margin_y = int(cy * (1.0 - ratio))
+            rect = pygame.Rect(margin_x, margin_y, w - margin_x * 2, h - margin_y * 2)
+            pygame.draw.rect(_vignette_surf, (0, 0, 0, alpha), rect, border_radius=max(1, int(60 * ratio)))
+
+    surface.blit(_vignette_surf, (0, 0))
+
+
+def draw_grain(surface, time_sec, intensity=0.04):
+    """Добавляет редкую зернистость плёнки (тёмные пиксели).
+    Генерируется раз в 3 кадра для производительности (не более 300 пикселей)."""
+    global _grain_surf, _grain_frame
+    w, h = surface.get_size()
+
+    _grain_frame += 1
+
+    if _grain_surf is None or _grain_surf.get_size() != (w, h):
+        _grain_surf = pygame.Surface((w, h), pygame.SRCALPHA)
+        _grain_frame = 0  # force regeneration
+
+    if _grain_frame % 3 == 0:
+        _grain_surf.fill((0, 0, 0, 0))
+        num_pixels = min(300, int(w * h * intensity * 0.001))
+        for _ in range(num_pixels):
+            px = random.randint(0, w - 1)
+            py = random.randint(0, h - 1)
+            darkness = random.randint(60, 140)
+            _grain_surf.set_at((px, py), (0, 0, 0, darkness))
+
+    surface.blit(_grain_surf, (0, 0))
+
+
+def draw_woodcut_border(surface, rect, color=(90, 65, 40)):
+    """Рисует «рваную деревянную рамку» вокруг rect — имитация гравюры на дереве.
+    Несколько нерегулярных линий с небольшим смещением."""
+    rx, ry, rw, rh = rect.x, rect.y, rect.width, rect.height
+
+    # Рисуем 3 слоя слегка смещённых линий, имитируя волокна дерева
+    for layer in range(3):
+        offset = layer * 1
+        alpha_mult = 1.0 - layer * 0.25
+        col = tuple(max(0, min(255, int(c * alpha_mult))) for c in color)
+
+        # Количество «зазубрин» — маленьких отклонений по каждой стороне
+        segs = 8
+        # Верхняя сторона
+        pts_top = []
+        for s in range(segs + 1):
+            t = s / segs
+            x = rx + int(rw * t)
+            jitter = random.randint(-2, 2) if 0 < s < segs else 0
+            pts_top.append((x + offset, ry + jitter + offset))
+        pygame.draw.lines(surface, col, False, pts_top, 1)
+
+        # Нижняя сторона
+        pts_bot = []
+        for s in range(segs + 1):
+            t = s / segs
+            x = rx + int(rw * t)
+            jitter = random.randint(-2, 2) if 0 < s < segs else 0
+            pts_bot.append((x + offset, ry + rh + jitter + offset))
+        pygame.draw.lines(surface, col, False, pts_bot, 1)
+
+        # Левая сторона
+        pts_left = []
+        for s in range(segs + 1):
+            t = s / segs
+            y = ry + int(rh * t)
+            jitter = random.randint(-2, 2) if 0 < s < segs else 0
+            pts_left.append((rx + jitter + offset, y + offset))
+        pygame.draw.lines(surface, col, False, pts_left, 1)
+
+        # Правая сторона
+        pts_right = []
+        for s in range(segs + 1):
+            t = s / segs
+            y = ry + int(rh * t)
+            jitter = random.randint(-2, 2) if 0 < s < segs else 0
+            pts_right.append((rx + rw + jitter + offset, y + offset))
+        pygame.draw.lines(surface, col, False, pts_right, 1)
+
+
+def draw_scratchy_text(surface, text, x, y, size, color, anchor="center"):
+    """Рисует текст с лёгким смещением тени — имитирует напечатанный на старой машинке.
+    Две тени: основная (+2,+1) и дополнительная (+1,0) более тусклая."""
+    font = FontCache.get(size)
+
+    # Дополнительная тень (+1, 0) — совсем тусклая
+    dim_col = tuple(max(0, int(c * 0.18)) for c in color)
+    sh2 = font.render(text, True, dim_col)
+    r2 = sh2.get_rect(**{anchor: (x + 1, y)})
+    surface.blit(sh2, r2)
+
+    # Основная тень (+2, +1) — тёмная
+    sh1 = font.render(text, True, (0, 0, 0))
+    r1 = sh1.get_rect(**{anchor: (x + 2, y + 1)})
+    surface.blit(sh1, r1)
+
+    # Основной текст
+    surf = font.render(text, True, color)
+    rect = surf.get_rect(**{anchor: (x, y)})
+    surface.blit(surf, rect)
+    return rect

@@ -1,6 +1,7 @@
 """
-game.py — Core game loop with full mouse drag-and-drop campfire interaction,
-marshmallow roasting, interactive poker, swaying forest, fireflies, and night eyes.
+game.py — Campfire Simulator with Inscryption-inspired atmosphere:
+- Separate Stick & Marshmallow Bag (skewer a marshmallow onto the stick, eat once, stick becomes empty)
+- "Forest Attention" mechanic: too cold (<25) attracts shadows, too bright (>75) attracts the Forest Entity!
 """
 import pygame
 import random
@@ -12,6 +13,7 @@ from sound_synth import sounds
 from ignition import MatchIgnition, LighterIgnition, FlintIgnition
 from ui import (
     Button, Card, Bar, Panel, draw_text, draw_notification,
+    draw_vignette, draw_grain, draw_woodcut_border, draw_scratchy_text,
     COLOR_PANEL, COLOR_PANEL_BORDER,
     COLOR_TEXT_MAIN, COLOR_TEXT_DIM, COLOR_TEXT_HIGHLIGHT,
     COLOR_WIN, COLOR_FAIL, COLOR_BAR_BREATH,
@@ -90,7 +92,7 @@ TOOLS = {
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Forest Scenery with Wind Sway, Fireflies & Night Predator Eyes
+#  Forest Scenery with Wind Sway, Small Eyes (Low Fire) & Tall Entity (High Fire)
 # ─────────────────────────────────────────────────────────────────────────────
 class ForestScenery:
     def __init__(self):
@@ -103,7 +105,6 @@ class ForestScenery:
             size = 1 if random.random() < 0.8 else 2
             self.stars.append([x, y, brightness, twinkle_speed, size])
 
-        # Светлячки
         self.fireflies = []
         for _ in range(12):
             self.fireflies.append([
@@ -113,24 +114,23 @@ class ForestScenery:
                 random.uniform(0.4, 1.1)
             ])
 
-        # Точки в лесу, где могут загораться глаза хищников, когда костёр гаснет
         self.eye_spots = [
             (110, 325), (185, 315), (250, 330),
             (555, 328), (630, 318), (705, 332)
         ]
 
-    def draw(self, surface, time_sec, wind_strength=0.0, fire_temp=50.0):
+    def draw(self, surface, time_sec, wind_strength=0.0, fire_temp=50.0, attention=0.0):
         # 1. Night sky gradient
         for y in range(0, FIRE_CY + 15):
             ratio = y / (FIRE_CY + 15)
-            r = int(6 + 14 * ratio)
-            g = int(10 + 16 * ratio)
-            b = int(22 + 18 * ratio)
+            r = int(5 + 12 * ratio)
+            g = int(8 + 14 * ratio)
+            b = int(18 + 16 * ratio)
             pygame.draw.line(surface, (r, g, b), (0, y), (SCREEN_W, y))
 
         # 2. Moon crescent
-        pygame.draw.circle(surface, (230, 235, 210), (680, 85), 24)
-        pygame.draw.circle(surface, (8, 12, 25), (670, 80), 22)
+        pygame.draw.circle(surface, (220, 225, 200), (680, 85), 24)
+        pygame.draw.circle(surface, (6, 10, 20), (670, 80), 22)
 
         # 3. Twinkling stars
         for s in self.stars:
@@ -140,33 +140,35 @@ class ForestScenery:
 
         # 4. Swaying distant pines
         sway = math.sin(time_sec * 2.2) * (2.0 + abs(wind_strength) * 0.22) + (wind_strength * 0.15)
-        self._draw_pines(surface, y_base=345, height=110, count=16, color=(12, 18, 22), sway=sway)
+        self._draw_pines(surface, y_base=345, height=110, count=16, color=(10, 15, 18), sway=sway)
 
-        # 5. Closer side trees
+        # 5. Tall Horned Silhouette (Inscryption vibe) when fire attracts attention!
+        if attention > 0.15:
+            self._draw_forest_entity(surface, time_sec, attention)
+
+        # 6. Closer side trees
         self._draw_side_trees(surface, sway * 1.3)
 
-        # 6. Ground
+        # 7. Ground
         for y in range(FIRE_CY, SCREEN_H):
             ratio = (y - FIRE_CY) / (SCREEN_H - FIRE_CY)
-            r = max(5, int(28 - 16 * ratio))
-            g = max(4, int(22 - 12 * ratio))
-            b = max(3, int(15 - 9 * ratio))
+            r = max(4, int(24 - 15 * ratio))
+            g = max(3, int(18 - 11 * ratio))
+            b = max(2, int(12 - 8 * ratio))
             pygame.draw.line(surface, (r, g, b), (0, y), (SCREEN_W, y))
 
-        # 7. Glowing Eyes in the dark when fire is weak (< 45 temp)
-        if fire_temp < 45.0:
-            danger = (45.0 - fire_temp) / 45.0  # 0..1
+        # 8. Small wolf eyes when fire is too weak (< 35 temp)
+        if fire_temp < 35.0:
+            danger = (35.0 - fire_temp) / 35.0
             num_eyes = int(danger * len(self.eye_spots)) + 1
             for idx in range(min(num_eyes, len(self.eye_spots))):
                 ex, ey = self.eye_spots[idx]
-                # Blinking
-                blink = math.sin(time_sec * 1.7 + idx * 2.1)
-                if blink > -0.7:
-                    eye_col = (255, int(180 - 120 * danger), 40)
+                if math.sin(time_sec * 1.7 + idx * 2.1) > -0.7:
+                    eye_col = (255, int(170 - 120 * danger), 40)
                     pygame.draw.circle(surface, eye_col, (ex - 4, ey), 2)
                     pygame.draw.circle(surface, eye_col, (ex + 4, ey), 2)
 
-        # 8. Fireflies
+        # 9. Fireflies
         for ff in self.fireflies:
             ff[0] += math.cos(time_sec * ff[3] + ff[2]) * 0.35 + wind_strength * 0.01
             ff[1] += math.sin(time_sec * 1.3 + ff[2]) * 0.25
@@ -176,6 +178,37 @@ class ForestScenery:
             if glow > 0.3:
                 c = int(220 * glow)
                 pygame.draw.circle(surface, (c, c, int(80 * glow)), (int(ff[0]), int(ff[1])), 2)
+
+    def _draw_forest_entity(self, surface, time_sec, attention):
+        """Рисует жуткий рогатый силуэт между соснами, который подходит ближе при высоком внимании."""
+        ex = 520 + int(math.sin(time_sec * 0.8) * 4)
+        scale = 0.6 + 0.55 * attention
+        ey = int(345 - 85 * scale)
+        body_w = int(34 * scale)
+        body_h = int(95 * scale)
+
+        # Тёмный силуэт тела и головы
+        pygame.draw.ellipse(surface, (6, 8, 10), (ex - body_w // 2, ey, body_w, body_h))
+        head_r = int(14 * scale)
+        hx, hy = ex, ey - head_r // 2
+        pygame.draw.circle(surface, (6, 8, 10), (hx, hy), head_r)
+
+        # Оленьи рога
+        for side in (-1, 1):
+            bx = hx + side * int(8 * scale)
+            by = hy - int(8 * scale)
+            tip_x = bx + side * int(22 * scale)
+            tip_y = by - int(28 * scale)
+            pygame.draw.line(surface, (8, 10, 12), (bx, by), (tip_x, tip_y), max(2, int(3 * scale)))
+            pygame.draw.line(surface, (8, 10, 12), (bx + side * 6, by - 10), (bx + side * 4, by - 24), 2)
+            pygame.draw.line(surface, (8, 10, 12), (bx + side * 12, by - 16), (bx + side * 22, by - 18), 2)
+
+        # Гипнотические белые/красные глаза в стиле Inscryption
+        eye_off = max(4, int(5 * scale))
+        eye_r = max(2, int(3.5 * scale))
+        col = (255, int(255 * (1 - attention * 0.7)), int(255 * (1 - attention * 0.8)))
+        pygame.draw.circle(surface, col, (hx - eye_off, hy), eye_r)
+        pygame.draw.circle(surface, col, (hx + eye_off, hy), eye_r)
 
     def _draw_pines(self, surface, y_base, height, count, color, sway):
         step = SCREEN_W // count
@@ -189,7 +222,7 @@ class ForestScenery:
 
     def _draw_side_trees(self, surface, sway):
         for (x, w, h) in [(-30, 90, 320), (30, 80, 290), (740, 85, 300), (810, 95, 330)]:
-            pygame.draw.rect(surface, (16, 13, 10), (x + w // 2 - 12, 350, 24, 250))
+            pygame.draw.rect(surface, (14, 11, 8), (x + w // 2 - 12, 350, 24, 250))
             for tier in range(4):
                 tw = int(w * (0.45 + tier * 0.18))
                 th = int(h * 0.32)
@@ -198,7 +231,7 @@ class ForestScenery:
                 pts = [(x + w // 2 + tier_sway, ty),
                        (x + w // 2 - tw // 2, ty + th),
                        (x + w // 2 + tw // 2, ty + th)]
-                pygame.draw.polygon(surface, (14, 19, 16), pts)
+                pygame.draw.polygon(surface, (12, 16, 14), pts)
 
 
 def draw_stones_and_base_logs(surface, material_key):
@@ -246,42 +279,67 @@ class Game:
         self.weather  = WeatherSystem(SCREEN_W, SCREEN_H)
         self.scenery  = ForestScenery()
 
+        self.selected_mat  = "pine"
+        self.selected_tool = "match"
+
         self._reset()
 
     def _reset(self):
+        # Сохраняем выбор снаряжения (чтобы не сбрасывался при "Играть снова")
+        saved_mat  = getattr(self, 'selected_mat',  'pine')
+        saved_tool = getattr(self, 'selected_tool', 'match')
+
         self.state         = STATE_START
         self.temperature   = 0.0
         self.breath        = BREATH_MAX
         self.blowing       = False
         self.rmb_blowing   = False
-        self.selected_mat  = "pine"
-        self.selected_tool = "match"
         self.burn_timer    = 0.0
 
-        # Запасы топлива на поляне
-        self.inv_tinder   = 4
-        self.inv_kindling = 6
-        self.inv_logs     = 5
-        self.poker_cooldown = 0.0
+        # Внимание Леса (0.0 .. 1.0): растёт, если жечь костёр слишком ярко (>72°)!
+        self.forest_attention = 0.0
+        self.fail_custom_reason = ""
 
-        # Интерактивное перетаскивание мышью (Drag & Drop)
-        # 'tinder', 'kindling', 'log', 'poker', 'marshmallow', None
+        # Запасы на поляне
+        self.inv_tinder       = 4
+        self.inv_kindling     = 6
+        self.inv_bark         = 3   # Кора — между хворостом и поленом
+        self.inv_moss         = 4   # Мох — медленное горение
+        self.inv_logs         = 5
+        self.inv_marshmallows = 4  # Количество зефирок в пакетике!
+        self.poker_cooldown   = 0.0
+
+        # Состояние палочки и зефирки
+        self.stick_has_marsh  = False  # Наколота ли сейчас зефирка на палочку
+        self.marsh_roast      = 0.0
+        self.marsh_eaten_count = 0
+
+        # Перетаскивание мышью: 'tinder', 'kindling', 'bark', 'moss', 'log', 'poker', 'stick', None
         self.drag_item = None
         self.mouse_pos = [400, 300]
         self.prev_mouse_pos = [400, 300]
         self.poke_accum = 0.0
 
-        # Состояние зефирки (0.0 = сырая белая, 0.5..0.85 = золотистая, >1.0 = сгорела)
-        self.marsh_roast = 0.0
-        self.marsh_eaten_count = 0
+        # 8 слотов предметов на земле внизу экрана (ширина ~88px, начинаются с y=480)
+        SLOT_W = 88
+        SLOT_H = 78
+        SLOT_Y = 480
+        SLOT_GAP = 4
+        total_w = 8 * SLOT_W + 7 * SLOT_GAP
+        slot_start_x = (SCREEN_W - total_w) // 2
 
-        # Хитбоксы предметов внизу экрана на поляне
-        self.rect_tinder   = pygame.Rect(45,  485, 115, 75)
-        self.rect_kindling = pygame.Rect(180, 485, 125, 75)
-        self.rect_logs     = pygame.Rect(325, 485, 135, 75)
-        self.rect_poker    = pygame.Rect(485, 485, 120, 75)
-        self.rect_marsh    = pygame.Rect(625, 485, 130, 75)
-        self.fire_drop_zone = pygame.Rect(FIRE_CX - 95, FIRE_CY - 70, 190, 125)
+        def slot_rect(idx):
+            return pygame.Rect(slot_start_x + idx * (SLOT_W + SLOT_GAP), SLOT_Y, SLOT_W, SLOT_H)
+
+        self.rect_tinder     = slot_rect(0)
+        self.rect_kindling   = slot_rect(1)
+        self.rect_bark       = slot_rect(2)
+        self.rect_moss       = slot_rect(3)
+        self.rect_logs       = slot_rect(4)
+        self.rect_poker      = slot_rect(5)
+        self.rect_stick      = slot_rect(6)
+        self.rect_marsh_bag  = slot_rect(7)
+        self.fire_drop_zone  = pygame.Rect(FIRE_CX - 95, FIRE_CY - 70, 190, 125)
 
         self.ignition_game = None
 
@@ -293,13 +351,16 @@ class Game:
         self.fire.clear_fuel()
         self.weather.force_calm()
 
+        # Восстанавливаем выбор снаряжения
+        self.selected_mat  = saved_mat
+        self.selected_tool = saved_tool
+
         self._build_ui()
 
     def _build_ui(self):
         self.btn_start = Button((SCREEN_W // 2 - 110, 420, 220, 48),
                                 "Начать симуляцию", size=FONT_SIZE_MEDIUM)
 
-        # Кнопка включения/выключения звука в правом верхнем углу
         self.btn_mute = Button((SCREEN_W - 135, 12, 120, 28),
                                "Звук: ВКЛ (M)", size=FONT_SIZE_TINY)
 
@@ -323,12 +384,16 @@ class Game:
         self.btn_prep_confirm = Button((SCREEN_W // 2 - 110, 490, 220, 46),
                                       "К розжигу!", size=FONT_SIZE_MEDIUM)
 
-        # Компактный HUD сверху слева
-        self.bar_temp   = Bar((20, 18, 200, 20), "Жар костра")
-        self.bar_breath = Bar((20, 44, 200, 20), "Дыхание",
+        # Показатели сверху слева
+        self.bar_temp   = Bar((20, 16, 205, 18), "Жар (25..75°)")
+        self.bar_breath = Bar((20, 39, 205, 18), "Дыхание",
                               lo_color=COLOR_BAR_BREATH,
                               mid_color=COLOR_BAR_BREATH,
                               hi_color=COLOR_BAR_BREATH)
+        self.bar_attention = Bar((20, 62, 205, 18), "Внимание леса",
+                                 lo_color=(70, 140, 90),
+                                 mid_color=(220, 140, 30),
+                                 hi_color=(220, 35, 35))
 
         self.btn_play_again   = Button((SCREEN_W // 2 - 110, 430, 220, 48),
                                        "Играть снова", size=FONT_SIZE_MEDIUM)
@@ -355,6 +420,8 @@ class Game:
     def _go_ignition(self):
         self.state = STATE_IGNITION
         self.temperature = 0.0
+        self.forest_attention = 0.0
+        self.fail_custom_reason = ""
         self.fire.set_temperature(0)
         self.fire.clear_fuel()
 
@@ -367,14 +434,15 @@ class Game:
 
     def _go_burning(self):
         self.state       = STATE_BURNING
-        self.temperature = 18.0
+        self.temperature = 28.0
         self.burn_timer  = 0.0
+        self.forest_attention = 0.0
         self.fire.set_temperature(self.temperature)
         self.fire.add_fuel_visual('tinder')
         self.fire.add_fuel_visual('kindling')
         self.fire.burst_embers(25)
         sounds.play('match_light')
-        self._notify("Перетаскивай дрова мышкой прямо в костёр! Води кочергой по углям!", 4.0)
+        self._notify("Поддерживай огонь, но не жги >75° слишком долго — привлечёшь Нечто из леса!", 4.2)
 
     # ── Fuel & Item actions ───────────────────────────────────────────────────
     def _add_tinder(self):
@@ -384,9 +452,9 @@ class Game:
         self.inv_tinder -= 1
         sounds.play('wood_drop')
         self.fire.add_fuel_visual('tinder')
-        self.temperature = min(100.0, self.temperature + 16.0)
+        self.temperature = min(100.0, self.temperature + 15.0)
         self.fire.burst_embers(12)
-        self._notify(f"Береста вспыхнула в огне! (+16° жара)")
+        self._notify("Береста вспыхнула! (+15° жара)")
 
     def _add_kindling(self):
         if self.inv_kindling <= 0:
@@ -397,7 +465,29 @@ class Game:
         self.fire.add_fuel_visual('kindling')
         self.temperature = min(100.0, self.temperature + 18.0)
         self.fire.burst_embers(16)
-        self._notify(f"Сухие ветки весело затрещали! (+18° жара)")
+        self._notify("Сухие ветки весело затрещали! (+18° жара)")
+
+    def _add_bark(self):
+        if self.inv_bark <= 0:
+            self._notify("Кора закончилась!", color=COLOR_FAIL)
+            return
+        self.inv_bark -= 1
+        sounds.play('wood_drop')
+        self.fire.add_fuel_visual('kindling')  # кора визуально как хворост
+        self.temperature = min(100.0, self.temperature + 12.0)
+        self.fire.burst_embers(10)
+        self._notify("Кора занялась! (+12° жара)")
+
+    def _add_moss(self):
+        if self.inv_moss <= 0:
+            self._notify("Мох закончился!", color=COLOR_FAIL)
+            return
+        self.inv_moss -= 1
+        sounds.play('wood_drop')
+        self.fire.add_fuel_visual('tinder')  # мох визуально как трут
+        self.temperature = min(100.0, self.temperature + 8.0)
+        self.fire.burst_embers(6)
+        self._notify("Влажный мох медленно тлеет... (+8° жара)")
 
     def _add_log(self):
         if self.inv_logs <= 0:
@@ -413,10 +503,10 @@ class Game:
         else:
             self.inv_logs -= 1
             mat_mult = MATERIALS[self.selected_mat]["heat_mul"]
-            gain = int(26.0 * mat_mult)
+            gain = int(25.0 * mat_mult)
             self.temperature = min(100.0, self.temperature + gain)
             self.fire.burst_embers(22)
-            self._notify(f"Бревно занялось мощным жаром! (+{gain}°)")
+            self._notify(f"Бревно занялось жаром! (+{gain}°)")
 
     def _use_poker(self):
         if self.poker_cooldown > 0:
@@ -426,6 +516,19 @@ class Game:
         self.fire.burst_embers(25)
         self.temperature = min(100.0, self.temperature + 6.5)
         self._notify("Угли разворошены кочергой! (+6.5° жара)")
+
+    def _try_skewer_marshmallow(self):
+        """Накалывает одну зефирку из пакетика на пустую палочку."""
+        if self.stick_has_marsh:
+            return
+        if self.inv_marshmallows <= 0:
+            self._notify("Пакетик пуст! Зефирок больше не осталось.", color=COLOR_FAIL)
+            return
+        self.inv_marshmallows -= 1
+        self.stick_has_marsh = True
+        self.marsh_roast = 0.0
+        sounds.play('wood_drop')
+        self._notify(f"Наколол зефирку на палочку! (В пакетике осталось: {self.inv_marshmallows})")
 
     # ── Event handling ────────────────────────────────────────────────────────
     def handle_events(self):
@@ -438,7 +541,13 @@ class Game:
                 self.prev_mouse_pos = list(self.mouse_pos)
                 self.mouse_pos = list(event.pos)
 
-            # Mute button works everywhere
+                # Если держим пустую палочку и провели ей над пакетиком с зефирками — накалываем!
+                if self.state == STATE_BURNING and self.drag_item == 'stick' and not self.stick_has_marsh:
+                    if self.rect_marsh_bag.collidepoint(event.pos):
+                        self._try_skewer_marshmallow()
+
+                # Если держим мох над кострищем при перетаскивании — ничего (сбросим в MOUSEBUTTONUP)
+
             if self.btn_mute.handle_event(event):
                 self._toggle_mute()
                 continue
@@ -458,8 +567,12 @@ class Game:
                     elif event.key == pygame.K_2:
                         self._add_kindling()
                     elif event.key == pygame.K_3:
+                        self._add_bark()
+                    elif event.key == pygame.K_4:
+                        self._add_moss()
+                    elif event.key == pygame.K_5:
                         self._add_log()
-                    elif event.key == pygame.K_4 or event.key == pygame.K_f:
+                    elif event.key == pygame.K_6 or event.key == pygame.K_f:
                         self._use_poker()
 
             if event.type == pygame.KEYUP:
@@ -508,40 +621,55 @@ class Game:
                     self.drag_item = 'tinder'
                 elif self.rect_kindling.collidepoint(pos) and self.inv_kindling > 0:
                     self.drag_item = 'kindling'
+                elif self.rect_bark.collidepoint(pos) and self.inv_bark > 0:
+                    self.drag_item = 'bark'
+                elif self.rect_moss.collidepoint(pos) and self.inv_moss > 0:
+                    self.drag_item = 'moss'
                 elif self.rect_logs.collidepoint(pos) and self.inv_logs > 0:
                     self.drag_item = 'log'
                 elif self.rect_poker.collidepoint(pos):
                     self.drag_item = 'poker'
                     self.poke_accum = 0.0
-                elif self.rect_marsh.collidepoint(pos):
-                    self.drag_item = 'marshmallow'
+                elif self.rect_stick.collidepoint(pos):
+                    self.drag_item = 'stick'
+                elif self.rect_marsh_bag.collidepoint(pos):
+                    # Если кликнули по пакетику — берём палочку и сразу накалываем зефирку
+                    self.drag_item = 'stick'
+                    self._try_skewer_marshmallow()
 
-            elif event.button == 3:  # ПКМ — съесть поджаренную зефирку ИЛИ дуть на костёр
-                if self.drag_item == 'marshmallow':
+            elif event.button == 3:  # ПКМ — съесть зефирку с палочки ИЛИ дуть на костёр
+                if self.drag_item == 'stick' and self.stick_has_marsh:
                     if 0.45 <= self.marsh_roast <= 0.95:
+                        # Съели! Палочка становится ПУСТОЙ и возвращается на место
+                        self.stick_has_marsh = False
                         self.marsh_roast = 0.0
                         self.marsh_eaten_count += 1
+                        self.drag_item = None  # кладём палочку обратно!
                         self.breath = BREATH_MAX
-                        self.temperature = min(100.0, self.temperature + 5.0)
+                        self.forest_attention = max(0.0, self.forest_attention - 0.20)
                         sounds.play('match_light')
-                        self._notify("Идеальная золотистая зефирка съедена! Дыхание 100%!", color=COLOR_WIN)
+                        self._notify("Зефирка съедена! Дыхание 100%, страх отступил! Наколи новую из пачки.", color=COLOR_WIN)
                     elif self.marsh_roast > 0.95:
+                        # Стряхнули уголёк — палочка пустая!
+                        self.stick_has_marsh = False
                         self.marsh_roast = 0.0
-                        self._notify("Фу, сгоревший уголёк... Насадил новую зефирку.", color=COLOR_FAIL)
+                        self._notify("Сгоревший уголёк стряхнут с палочки. Наколи новую зефирку из пакетика!", color=COLOR_FAIL)
                     else:
-                        self._notify("Она ещё сырая! Подержи её над макушкой огня.", color=COLOR_TEXT_DIM)
+                        self._notify("Зефирка ещё сырая! Подержи её над огнём.", color=COLOR_TEXT_DIM)
                 else:
-                    # Зажатие ПКМ дует на угли (альтернатива Пробелу)
                     self.rmb_blowing = True
 
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1 and self.drag_item:
-                # Если бросили топливо в зону костра
                 if self.fire_drop_zone.collidepoint(event.pos):
                     if self.drag_item == 'tinder':
                         self._add_tinder()
                     elif self.drag_item == 'kindling':
                         self._add_kindling()
+                    elif self.drag_item == 'bark':
+                        self._add_bark()
+                    elif self.drag_item == 'moss':
+                        self._add_moss()
                     elif self.drag_item == 'log':
                         self._add_log()
                 self.drag_item = None
@@ -580,7 +708,7 @@ class Game:
         decay -= self.weather.temp_modifier
         self.temperature -= decay
 
-        # Интерактив кочергой: если водим кочергой по зоне костра
+        # Интерактив кочергой
         mx, my = self.mouse_pos
         if self.drag_item == 'poker' and self.fire_drop_zone.collidepoint((mx, my)):
             dist = math.hypot(mx - self.prev_mouse_pos[0], my - self.prev_mouse_pos[1])
@@ -591,19 +719,16 @@ class Game:
                 self.poke_accum = 0.0
                 self._use_poker()
 
-        # Интерактив жарки зефирки над огнём
-        if self.drag_item == 'marshmallow':
-            # Зона над огнём
+        # Жарка зефирки (только если она наколота на палочку!)
+        if self.drag_item == 'stick' and self.stick_has_marsh:
             dist_x = abs(mx - FIRE_CX)
             if dist_x < 75 and (FIRE_CY - 140 < my < FIRE_CY + 10) and self.temperature > 10:
                 if my > FIRE_CY - 35:
-                    # Слишком низко в самом пекле — быстро сгорает!
                     self.marsh_roast += dt * 0.45
                 else:
-                    # Над огнём — плавно подрумянивается
-                    self.marsh_roast += dt * 0.18 * (self.temperature / 50.0)
+                    self.marsh_roast += dt * 0.20 * (self.temperature / 50.0)
 
-        # Раздувание (Пробел ИЛИ ПКМ)
+        # Раздувание
         is_blowing = self.blowing or self.rmb_blowing
         if is_blowing and self.breath > 0:
             self.breath = max(0.0, self.breath - BREATH_DEPLETE_RATE)
@@ -621,6 +746,19 @@ class Game:
         self.temperature = max(0.0, min(100.0, self.temperature))
         self.fire.set_temperature(self.temperature)
 
+        # ── Механика "Внимание Леса" (Чем ярче жжёшь >72°, тем сильнее привлекаешь Сущность!) ──
+        if self.temperature > 72.0:
+            excess = (self.temperature - 72.0) / 28.0
+            self.forest_attention = min(1.0, self.forest_attention + dt * (0.09 + 0.14 * excess))
+        else:
+            self.forest_attention = max(0.0, self.forest_attention - dt * 0.06)
+
+        if self.forest_attention >= 1.0:
+            self.fail_custom_reason = "Твой огромный костёр привлёк Хозяина Леса из чащи..."
+            self.state = STATE_FAIL
+            sounds.play('blow')
+            return
+
         if self.temperature > 5.0:
             self.burn_timer += dt
 
@@ -628,16 +766,19 @@ class Game:
             self.state = STATE_WIN
             sounds.play('match_light')
         elif self.temperature <= 0.0:
+            self.fail_custom_reason = "Костёр погас, и ночные тени сомкнулись вокруг поляны."
             self.state = STATE_FAIL
             sounds.play('blow')
 
         self.bar_temp.set_value(self.temperature / 100.0)
         self.bar_breath.set_value(self.breath)
+        self.bar_attention.set_value(self.forest_attention)
 
     # ── Draw ──────────────────────────────────────────────────────────────────
     def draw(self):
         fire_vis_temp = self.temperature if self.state == STATE_BURNING else 45.0
-        self.scenery.draw(self.screen, self.time_sec, self.weather.wind_strength, fire_vis_temp)
+        att = self.forest_attention if self.state == STATE_BURNING else 0.0
+        self.scenery.draw(self.screen, self.time_sec, self.weather.wind_strength, fire_vis_temp, att)
         draw_stones_and_base_logs(self.screen, self.selected_mat)
         self.weather.draw(self.screen)
         self.fire.draw(self.screen)
@@ -662,25 +803,37 @@ class Game:
             alpha = min(255, int(self.notif_t * 6))
             draw_notification(self.screen, self.notif, 115, color=self.notif_color, alpha=alpha)
 
+        # Мерцание экрана при высоком внимании леса (>0.65)
+        if self.state == STATE_BURNING and self.forest_attention > 0.65:
+            fear_alpha = int(22 * ((self.forest_attention - 0.65) / 0.35) * (0.6 + 0.4 * math.sin(self.time_sec * 8.0)))
+            if fear_alpha > 0:
+                fear_surf = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+                fear_surf.fill((160, 10, 10, fear_alpha))
+                self.screen.blit(fear_surf, (0, 0))
+
+        # Inscryption визуальные эффекты поверх всего
+        draw_vignette(self.screen)
+        draw_grain(self.screen, self.time_sec)
+
         pygame.display.flip()
 
     def _draw_start(self):
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 150))
+        overlay.fill((0, 0, 0, 155))
         self.screen.blit(overlay, (0, 0))
 
         draw_text(self.screen, "КОСТЁР", SCREEN_W // 2, 110,
                   size=FONT_SIZE_LARGE + 18, color=COLOR_TEXT_HIGHLIGHT,
                   anchor="center", shadow=True)
-        draw_text(self.screen, "Тактильный симулятор выживания в ночном лесу",
+        draw_text(self.screen, "Выживание у огня в ночной чаще",
                   SCREEN_W // 2, 175, size=FONT_SIZE_MEDIUM,
                   color=COLOR_TEXT_DIM, anchor="center")
 
         instructions = [
-            "Розжиг: чиркай спичкой, крути колёсико зажигалки или высекай искры огнивом.",
-            "Интерактив мышью: перетаскивай бересту, ветки и брёвна прямо в костёр!",
-            "Води палкой-кочергой по углям и жарь зефирку над пламенем.",
-            "Поддерживай яркий огонь 60 секунд, чтобы хищники из темноты не подошли близко.",
+            "Поддерживай огонь, но следи за шкалой «Внимание леса»!",
+            "Слишком слабый огонь (<35°) манит волков, слишком яркий (>72°) зовёт Хозяина Леса.",
+            "Бери пустую палочку, накалывай зефирку из пакетика и жарь над углями.",
+            "Съеденная золотистая зефирка успокаивает нервы и снижает Внимание леса!",
         ]
         y = 235
         for line in instructions:
@@ -725,11 +878,13 @@ class Game:
                       size=FONT_SIZE_SMALL, color=wc, anchor="midtop")
 
     def _draw_burning(self):
-        # 1. Компактная панель показателей сверху слева
-        panel = Panel((10, 10, 220, 64), "")
+        # 1. Панель показателей сверху слева
+        panel = Panel((10, 8, 225, 80), "")
         panel.draw(self.screen)
+        draw_woodcut_border(self.screen, panel.rect, (100, 75, 45))
         self.bar_temp.draw(self.screen)
         self.bar_breath.draw(self.screen)
+        self.bar_attention.draw(self.screen)
 
         # 2. Таймер и погода
         rem = max(0.0, BURN_GOAL_SECONDS - self.burn_timer)
@@ -741,35 +896,37 @@ class Game:
             draw_text(self.screen, self.weather.label, SCREEN_W // 2, 18,
                       size=FONT_SIZE_SMALL, color=wc, anchor="midtop")
 
-        # Предупреждение о глазах в темноте
-        if self.temperature < 40.0:
-            draw_text(self.screen, "Костёр гаснет... В темноте леса зажглись чьи-то глаза!",
-                      SCREEN_W // 2, 45, size=FONT_SIZE_TINY, color=(255, 110, 80), anchor="midtop")
+        # Предупреждения
+        if self.forest_attention > 0.5:
+            draw_text(self.screen, "Огонь слишком яркий! Между соснами кто-то стоит и смотрит на пламя!",
+                      SCREEN_W // 2, 44, size=FONT_SIZE_TINY, color=(255, 80, 80), anchor="midtop")
+        elif self.temperature < 35.0:
+            draw_text(self.screen, "Костёр гаснет... В кустах зажглись волчьи глаза!",
+                      SCREEN_W // 2, 44, size=FONT_SIZE_TINY, color=(255, 160, 80), anchor="midtop")
 
         # 3. Подсветка зоны костра при перетаскивании топлива
-        if self.drag_item in ('tinder', 'kindling', 'log'):
+        if self.drag_item in ('tinder', 'kindling', 'bark', 'moss', 'log'):
             hl = pygame.Surface((self.fire_drop_zone.width, self.fire_drop_zone.height), pygame.SRCALPHA)
             pygame.draw.ellipse(hl, (255, 200, 80, 45), (0, 0, self.fire_drop_zone.width, self.fire_drop_zone.height), 2)
             self.screen.blit(hl, self.fire_drop_zone.topleft)
 
-        # 4. Визуальные стопки предметов на земле внизу экрана
+        # 4. Слоты предметов на земле
         self._draw_ground_items()
 
-        # 5. Отрисовка предмета, который сейчас в руке (на курсоре мыши)
+        # 5. Предмет в руке
         self._draw_dragged_item()
 
-        hint = "ЛКМ: тащи дрова в огонь / води кочергой / жарь зефир  |  ПКМ или ПРОБЕЛ: дуть на угли"
+        hint = "ЛКМ: тащи предметы / ткни палочкой в зефир  |  ПКМ: съесть зефир / дуть  |  1..5: быстрый подброс"
         draw_text(self.screen, hint, SCREEN_W // 2, SCREEN_H - 14,
                   size=FONT_SIZE_TINY, color=(210, 190, 145), anchor="center")
 
     def _draw_ground_items(self):
         mx, my = self.mouse_pos
 
-        # Хелпер для рамок слотов на земле
-        def draw_slot(rect, title, subtitle, active=True):
+        def draw_slot(rect, title, subtitle, active=True, highlight_target=False):
             hovered = rect.collidepoint((mx, my)) and active
-            bg = (52, 38, 24, 210) if hovered else (32, 24, 16, 185)
-            border = COLOR_TEXT_HIGHLIGHT if hovered else (95, 70, 42)
+            bg = (58, 42, 26, 220) if (hovered or highlight_target) else (30, 22, 15, 190)
+            border = (100, 230, 120) if highlight_target else (COLOR_TEXT_HIGHLIGHT if hovered else (90, 65, 40))
             s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
             pygame.draw.rect(s, bg, (0, 0, rect.width, rect.height), border_radius=8)
             pygame.draw.rect(s, border, (0, 0, rect.width, rect.height), width=2, border_radius=8)
@@ -779,57 +936,81 @@ class Game:
             draw_text(self.screen, subtitle, rect.centerx, rect.bottom - 10,
                       size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT if active else COLOR_TEXT_DIM, anchor="center")
 
-        # 1. Береста (Tinder)
-        draw_slot(self.rect_tinder, f"Береста ({self.inv_tinder})", "+16° быстро", self.inv_tinder > 0)
+        # 1. Береста (1)
+        draw_slot(self.rect_tinder, f"Береста ({self.inv_tinder})", "[1] +15°", self.inv_tinder > 0)
         for i in range(min(self.inv_tinder, 3)):
-            pygame.draw.ellipse(self.screen, (220, 200, 165), (self.rect_tinder.x + 28 + i * 16, self.rect_tinder.y + 14, 28, 16))
-            pygame.draw.line(self.screen, (80, 70, 60), (self.rect_tinder.x + 34 + i * 16, self.rect_tinder.y + 20), (self.rect_tinder.x + 48 + i * 16, self.rect_tinder.y + 22), 2)
+            pygame.draw.ellipse(self.screen, (220, 200, 165), (self.rect_tinder.x + 14 + i * 14, self.rect_tinder.y + 14, 26, 15))
 
-        # 2. Хворост (Kindling)
-        draw_slot(self.rect_kindling, f"Хворост ({self.inv_kindling})", "+18° ветки", self.inv_kindling > 0)
+        # 2. Хворост (2)
+        draw_slot(self.rect_kindling, f"Хворост ({self.inv_kindling})", "[2] +18°", self.inv_kindling > 0)
         for i in range(min(self.inv_kindling, 4)):
             pygame.draw.line(self.screen, (140, 100, 55),
-                             (self.rect_kindling.x + 25, self.rect_kindling.y + 15 + i * 6),
-                             (self.rect_kindling.x + 95, self.rect_kindling.y + 22 - i * 4), 4)
+                             (self.rect_kindling.x + 12, self.rect_kindling.y + 15 + i * 6),
+                             (self.rect_kindling.x + 74, self.rect_kindling.y + 22 - i * 4), 3)
 
-        # 3. Поленья (Logs)
-        draw_slot(self.rect_logs, f"Поленья ({self.inv_logs})", "Жар (нужно >25°)", self.inv_logs > 0)
+        # 3. Кора (3)
+        draw_slot(self.rect_bark, f"Кора ({self.inv_bark})", "[3] +12°", self.inv_bark > 0)
+        for i in range(min(self.inv_bark, 3)):
+            bx = self.rect_bark.x + 16 + i * 14
+            by = self.rect_bark.y + 16
+            pygame.draw.arc(self.screen, (115, 75, 45), (bx, by, 22, 18), 0.2, 3.0, 4)
+
+        # 4. Мох (4)
+        draw_slot(self.rect_moss, f"Мох ({self.inv_moss})", "[4] +8°", self.inv_moss > 0)
+        for i in range(min(self.inv_moss, 4)):
+            mx_pos = self.rect_moss.x + 18 + (i % 2) * 26
+            my_pos = self.rect_moss.y + 16 + (i // 2) * 12
+            pygame.draw.circle(self.screen, (60, 105, 45), (mx_pos, my_pos), 7)
+            pygame.draw.circle(self.screen, (85, 140, 60), (mx_pos + 2, my_pos - 2), 4)
+
+        # 5. Поленья (5)
+        draw_slot(self.rect_logs, f"Поленья ({self.inv_logs})", "[5] Жар >25°", self.inv_logs > 0)
         for i in range(min(self.inv_logs, 3)):
-            lx = self.rect_logs.x + 28 + i * 12
+            lx = self.rect_logs.x + 14 + i * 10
             ly = self.rect_logs.y + 14 + (i % 2) * 8
-            pygame.draw.rect(self.screen, (145, 110, 70), (lx, ly, 58, 16), border_radius=4)
-            pygame.draw.circle(self.screen, (190, 165, 120), (lx + 58, ly + 8), 7)
+            pygame.draw.rect(self.screen, (145, 110, 70), (lx, ly, 44, 13), border_radius=3)
+            pygame.draw.circle(self.screen, (190, 165, 120), (lx + 44, ly + 6), 6)
 
-        # 4. Кочерга (Poker)
-        draw_slot(self.rect_poker, "Кочерга", "Водить по углям", True)
+        # 6. Кочерга
+        draw_slot(self.rect_poker, "Кочерга", "Ворошить", True)
         pygame.draw.line(self.screen, (130, 135, 145),
-                         (self.rect_poker.x + 25, self.rect_poker.y + 34),
-                         (self.rect_poker.x + 90, self.rect_poker.y + 14), 4)
+                         (self.rect_poker.x + 16, self.rect_poker.y + 34),
+                         (self.rect_poker.x + 68, self.rect_poker.y + 14), 4)
         pygame.draw.line(self.screen, (130, 135, 145),
-                         (self.rect_poker.x + 90, self.rect_poker.y + 14),
-                         (self.rect_poker.x + 96, self.rect_poker.y + 24), 4)
+                         (self.rect_poker.x + 68, self.rect_poker.y + 14),
+                         (self.rect_poker.x + 74, self.rect_poker.y + 24), 4)
 
-        # 5. Зефирка на палочке (Marshmallow)
-        roast_txt = "ПКМ: съесть!" if 0.45 <= self.marsh_roast <= 0.95 else "Держать над огнём"
-        draw_slot(self.rect_marsh, "Зефирка", roast_txt, True)
+        # 7. Палочка (Рогатина для зефира)
+        stick_sub = "С зефиркой!" if self.stick_has_marsh else "Пустая"
+        draw_slot(self.rect_stick, "Палочка", stick_sub, True)
         pygame.draw.line(self.screen, (160, 125, 80),
-                         (self.rect_marsh.x + 30, self.rect_marsh.y + 35),
-                         (self.rect_marsh.x + 85, self.rect_marsh.y + 16), 3)
-        m_col = self._get_marsh_color()
-        pygame.draw.rect(self.screen, m_col, (self.rect_marsh.x + 80, self.rect_marsh.y + 10, 18, 14), border_radius=4)
+                         (self.rect_stick.x + 16, self.rect_stick.y + 35),
+                         (self.rect_stick.x + 68, self.rect_stick.y + 15), 3)
+        if self.stick_has_marsh:
+            m_col = self._get_marsh_color()
+            pygame.draw.rect(self.screen, m_col, (self.rect_stick.x + 62, self.rect_stick.y + 9, 14, 12), border_radius=3)
+
+        # 8. Пакетик с зефирками
+        need_skewer = (self.drag_item == 'stick' and not self.stick_has_marsh and self.inv_marshmallows > 0)
+        bag_sub = "Ткни палкой!" if need_skewer else "Пачка"
+        draw_slot(self.rect_marsh_bag, f"Зефир ({self.inv_marshmallows})", bag_sub,
+                  self.inv_marshmallows > 0, highlight_target=need_skewer)
+        # Рисуем пакетик и белые зефирки внутри
+        bx, by = self.rect_marsh_bag.x + 18, self.rect_marsh_bag.y + 10
+        pygame.draw.rect(self.screen, (180, 70, 85), (bx, by, 48, 26), border_radius=4)
+        pygame.draw.rect(self.screen, (230, 210, 215), (bx + 5, by + 3, 38, 18), border_radius=2)
+        for i in range(min(self.inv_marshmallows, 3)):
+            pygame.draw.circle(self.screen, (250, 248, 245), (bx + 12 + i * 11, by + 12), 4)
 
     def _get_marsh_color(self):
         r = self.marsh_roast
         if r < 0.45:
-            # От белого к нежно-кремовому
             t = r / 0.45
             return (250, int(248 - 30 * t), int(245 - 80 * t))
         elif r <= 0.95:
-            # Золотисто-карамельная корочка
             t = (r - 0.45) / 0.50
             return (int(245 - 45 * t), int(218 - 85 * t), int(165 - 115 * t))
         else:
-            # Сгорела в уголь
             return (35, 30, 28)
 
     def _draw_dragged_item(self):
@@ -846,52 +1027,68 @@ class Game:
             pygame.draw.line(self.screen, (135, 95, 50), (mx - 30, my + 10), (mx + 32, my - 10), 4)
             draw_text(self.screen, "Брось в костёр", mx, my - 24, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
+        elif self.drag_item == 'bark':
+            pygame.draw.arc(self.screen, (120, 80, 50), (mx - 28, my - 16, 56, 32), 0.2, 3.0, 6)
+            pygame.draw.arc(self.screen, (85, 55, 30), (mx - 24, my - 12, 48, 24), 0.2, 3.0, 4)
+            draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
+
+        elif self.drag_item == 'moss':
+            pygame.draw.circle(self.screen, (55, 100, 40), (mx - 10, my), 14)
+            pygame.draw.circle(self.screen, (70, 120, 50), (mx + 8, my - 4), 12)
+            pygame.draw.circle(self.screen, (85, 145, 60), (mx, my + 6), 11)
+            draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
+
         elif self.drag_item == 'log':
             pygame.draw.rect(self.screen, (150, 115, 75), (mx - 40, my - 12, 80, 24), border_radius=5)
             pygame.draw.circle(self.screen, (200, 175, 130), (mx + 40, my), 11)
             draw_text(self.screen, "Брось в костёр", mx, my - 26, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
         elif self.drag_item == 'poker':
-            # Кочерга тянется от правой руки к курсору
             pygame.draw.line(self.screen, (150, 155, 165), (mx + 95, my + 75), (mx, my), 5)
             pygame.draw.line(self.screen, (200, 120, 60), (mx, my), (mx - 12, my + 10), 5)
             draw_text(self.screen, "Води по углям туда-сюда!", mx, my - 22, size=FONT_SIZE_TINY, color=COLOR_TEXT_HIGHLIGHT, anchor="center")
 
-        elif self.drag_item == 'marshmallow':
-            pygame.draw.line(self.screen, (170, 135, 85), (mx + 90, my + 70), (mx, my), 3)
-            m_col = self._get_marsh_color()
-            pygame.draw.rect(self.screen, m_col, (mx - 12, my - 10, 24, 18), border_radius=5)
-            pygame.draw.rect(self.screen, (80, 60, 40), (mx - 12, my - 10, 24, 18), width=1, border_radius=5)
+        elif self.drag_item == 'stick':
+            # Рисуем деревянную палочку-рогатину
+            pygame.draw.line(self.screen, (170, 135, 85), (mx + 90, my + 70), (mx, my), 4)
+            pygame.draw.line(self.screen, (170, 135, 85), (mx, my), (mx - 8, my - 4), 2)
+            pygame.draw.line(self.screen, (170, 135, 85), (mx, my), (mx - 4, my - 9), 2)
 
-            if self.marsh_roast > 0.95:
-                status = "СГОРЕЛА! (Нажми ПКМ, чтобы взять новую)"
-                sc = COLOR_FAIL
-            elif self.marsh_roast >= 0.45:
-                status = f"ГОТОВА ({int(self.marsh_roast * 100)}%)! Нажми ПКМ, чтобы съесть!"
-                sc = COLOR_WIN
+            if not self.stick_has_marsh:
+                draw_text(self.screen, "Палочка пустая! Наведи на ПАЧКУ ЗЕФИРА справа внизу, чтобы наколоть!",
+                          mx, my - 24, size=FONT_SIZE_TINY, color=(130, 240, 150), anchor="center")
             else:
-                status = f"Жарится: {int((self.marsh_roast / 0.45) * 100)}% (держи над пламенем)"
-                sc = COLOR_TEXT_HIGHLIGHT
-            draw_text(self.screen, status, mx, my - 25, size=FONT_SIZE_TINY, color=sc, anchor="center")
+                m_col = self._get_marsh_color()
+                pygame.draw.rect(self.screen, m_col, (mx - 12, my - 10, 24, 18), border_radius=5)
+                pygame.draw.rect(self.screen, (80, 60, 40), (mx - 12, my - 10, 24, 18), width=1, border_radius=5)
+
+                if self.marsh_roast > 0.95:
+                    status = "СГОРЕЛА! Нажми ПКМ, чтобы стряхнуть уголёк с палочки"
+                    sc = COLOR_FAIL
+                elif self.marsh_roast >= 0.45:
+                    status = f"ГОТОВА ({int(self.marsh_roast * 100)}%)! Нажми ПКМ, чтобы съесть!"
+                    sc = COLOR_WIN
+                else:
+                    status = f"Жарится: {int((self.marsh_roast / 0.45) * 100)}% (держи над пламенем)"
+                    sc = COLOR_TEXT_HIGHLIGHT
+                draw_text(self.screen, status, mx, my - 25, size=FONT_SIZE_TINY, color=sc, anchor="center")
 
     def _draw_end(self, win: bool):
         overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
+        overlay.fill((0, 0, 0, 185))
         self.screen.blit(overlay, (0, 0))
 
         if win:
-            draw_text(self.screen, "Ты пережил ночь у костра!", SCREEN_W // 2, 180,
+            draw_text(self.screen, "Ты пережил эту ночь!", SCREEN_W // 2, 180,
                       size=FONT_SIZE_LARGE + 6, color=COLOR_WIN, anchor="center", shadow=True)
-            draw_text(self.screen, f"Огонь согревал поляну 60 секунд. Съедено зефирок: {self.marsh_eaten_count}",
+            draw_text(self.screen, f"Рассвет отпугнул тени леса. Съедено зефирок: {self.marsh_eaten_count}",
                       SCREEN_W // 2, 245, size=FONT_SIZE_MEDIUM, color=COLOR_TEXT_MAIN, anchor="center")
         else:
-            draw_text(self.screen, "Огонь угас в темноте...", SCREEN_W // 2, 180,
-                      size=FONT_SIZE_LARGE + 8, color=COLOR_FAIL, anchor="center", shadow=True)
-            fail_reason = ""
+            draw_text(self.screen, "Ночной лес поглотил тебя...", SCREEN_W // 2, 180,
+                      size=FONT_SIZE_LARGE + 6, color=COLOR_FAIL, anchor="center", shadow=True)
+            fail_reason = self.fail_custom_reason
             if self.ignition_game and self.ignition_game.failed and self.ignition_game.fail_reason:
                 fail_reason = self.ignition_game.fail_reason
-            elif self.temperature <= 0:
-                fail_reason = "Костру не хватило жара, угли остыли и ночной лес сомкнулся."
             draw_text(self.screen, fail_reason, SCREEN_W // 2, 245,
                       size=FONT_SIZE_MEDIUM, color=COLOR_TEXT_MAIN, anchor="center")
 
