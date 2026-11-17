@@ -153,9 +153,9 @@ class MatchIgnition(BaseIgnition):
         # ── Burning logic (if lit) ───────────────────────────────────────────
         if self.lit:
             self.burn_time -= dt
-            # 5 animation frames across 7.5 seconds
+            # 6 animation frames across 7.5 seconds
             burn_ratio = max(0.0, min(1.0, 1.0 - self.burn_time / 7.5))
-            self.burn_frame = min(4, int(burn_ratio * 5))
+            self.burn_frame = min(5, int(burn_ratio * 6))
 
             if self.burn_time <= 0:
                 self.failed = True
@@ -257,16 +257,16 @@ class MatchIgnition(BaseIgnition):
         if not self.lit and not self.broken:
             hand_unlit = TextureManager.get('match_hand_unlit')
             if hand_unlit:
-                # Sulfur head is at (71, 39) in unlit sprite
-                surface.blit(hand_unlit, (mx - 71, my - 39))
+                # Sulfur head is at (111, 63) in unlit sprite
+                surface.blit(hand_unlit, (mx - 111, my - 63))
             else:
                 pygame.draw.line(surface, (200, 175, 130), (mx, my), (mx + 45, my + 50), 4)
                 pygame.draw.circle(surface, (180, 40, 30), (mx, my), 5)
         elif self.lit:
             hand_lit = TextureManager.get(f'match_burn_{self.burn_frame + 1}')
             if hand_lit:
-                # Flame tip is at (72, 6) in burning sprite
-                surface.blit(hand_lit, (mx - 72, my - 6))
+                # Flame tip is at (111, 10) in burning sprite
+                surface.blit(hand_lit, (mx - 111, my - 10))
             else:
                 pygame.draw.line(surface, (120, 95, 70), (mx, my), (mx + 45, my + 50), 4)
                 pygame.draw.circle(surface, (255, 180, 40), (mx, my), 8)
