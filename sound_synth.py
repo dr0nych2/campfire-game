@@ -6,6 +6,7 @@ import pygame
 import math
 import random
 import struct
+import os
 
 SAMPLE_RATE = 22050
 
@@ -187,6 +188,25 @@ class SoundEngine:
             raw_fire[fire_loop_len - 1 - i] *= t
 
         self._fire_loop = pygame.mixer.Sound(buffer=self._pack_mono(raw_fire, 0.22))
+
+        # ── Загрузка реальных высококачественных аудиофайлов (если доступны) ──
+        base_dir = os.path.dirname(__file__)
+        real_fire = os.path.join(base_dir, 'assets', 'sounds', 'campfire_real.ogg')
+        if os.path.exists(real_fire):
+            try:
+                self._fire_loop = pygame.mixer.Sound(real_fire)
+            except Exception as e:
+                print(f"Failed to load campfire_real.ogg: {e}")
+
+        self._forest_ambience = None
+        real_forest = os.path.join(base_dir, 'assets', 'sounds', 'night_forest.ogg')
+        if os.path.exists(real_forest):
+            try:
+                self._forest_ambience = pygame.mixer.Sound(real_forest)
+                self._forest_ambience.set_volume(0.28)
+                self._forest_ambience.play(-1)
+            except Exception as e:
+                print(f"Failed to load night_forest.ogg: {e}")
 
         # 12. Уханье совы (синус 400 Гц + вибрато, медленный env, 1.2 сек)
         owl_len = int(SAMPLE_RATE * 1.2)

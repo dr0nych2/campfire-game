@@ -29,14 +29,14 @@ FIRE_CY  = 400
 LOG_W    = 130
 LOG_H    = 22
 
-TEMP_DECAY_BASE          = 0.070
-TEMP_BLOW_BOOST          = 0.52
+TEMP_DECAY_BASE          = 0.55
+TEMP_BLOW_BOOST          = 4.50
 BREATH_MAX               = 1.0
-BREATH_DEPLETE_RATE      = 0.015
-BREATH_REFILL_RATE       = 0.025
-BREATH_EMPTY_PENALTY     = 0.14
+BREATH_DEPLETE_RATE      = 0.22
+BREATH_REFILL_RATE       = 0.35
+BREATH_EMPTY_PENALTY     = 1.20
 
-BURN_GOAL_SECONDS = 60.0
+BURN_GOAL_SECONDS = 180.0
 
 STATE_START    = "start"
 STATE_PREP     = "prep"
@@ -704,8 +704,8 @@ class Game:
 
     def _update_burning(self, dt):
         mat = MATERIALS[self.selected_mat]
-        decay = TEMP_DECAY_BASE * mat["decay_mul"]
-        decay -= self.weather.temp_modifier
+        # Плавное, реалистичное остывание с учётом времени (секунды, а не кадры!)
+        decay = (TEMP_DECAY_BASE * mat["decay_mul"] - self.weather.temp_modifier) * dt
         self.temperature -= decay
 
         # Интерактив кочергой
@@ -724,24 +724,24 @@ class Game:
             dist_x = abs(mx - FIRE_CX)
             if dist_x < 75 and (FIRE_CY - 140 < my < FIRE_CY + 10) and self.temperature > 10:
                 if my > FIRE_CY - 35:
-                    self.marsh_roast += dt * 0.45
+                    self.marsh_roast += dt * 0.18
                 else:
-                    self.marsh_roast += dt * 0.20 * (self.temperature / 50.0)
+                    self.marsh_roast += dt * 0.08 * (self.temperature / 50.0)
 
         # Раздувание
         is_blowing = self.blowing or self.rmb_blowing
         if is_blowing and self.breath > 0:
-            self.breath = max(0.0, self.breath - BREATH_DEPLETE_RATE)
+            self.breath = max(0.0, self.breath - BREATH_DEPLETE_RATE * dt)
             if random.random() < 0.12:
                 sounds.play('blow')
             if self.breath <= 0:
-                self.temperature -= BREATH_EMPTY_PENALTY
+                self.temperature -= BREATH_EMPTY_PENALTY * dt
             else:
-                self.temperature += TEMP_BLOW_BOOST * mat["heat_mul"]
+                self.temperature += (TEMP_BLOW_BOOST * mat["heat_mul"]) * dt
                 if random.random() < 0.22:
                     self.fire.burst_embers(2)
         else:
-            self.breath = min(BREATH_MAX, self.breath + BREATH_REFILL_RATE)
+            self.breath = min(BREATH_MAX, self.breath + BREATH_REFILL_RATE * dt)
 
         self.temperature = max(0.0, min(100.0, self.temperature))
         self.fire.set_temperature(self.temperature)
@@ -784,6 +784,19 @@ class Game:
         self.fire.draw(self.screen)
         self.fire.draw_ambient_light(self.screen)
 
+        # Виньетка и лёгкое зерно накладываются ТОЛЬКО на игровой мир (под UI!),
+        # чтобы кнопки, текст и слоты инвентаря оставались яркими и чёткими!
+        draw_vignette(self.screen)
+        draw_grain(self.screen, self.time_sec)
+
+        # Мерцание экрана при высоком внимании леса (>0.65)
+        if self.state == STATE_BURNING and self.forest_attention > 0.65:
+            fear_alpha = int(20 * ((self.forest_attention - 0.65) / 0.35) * (0.6 + 0.4 * math.sin(self.time_sec * 8.0)))
+            if fear_alpha > 0:
+                fear_surf = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+                fear_surf.fill((160, 10, 10, fear_alpha))
+                self.screen.blit(fear_surf, (0, 0))
+
         if self.state == STATE_START:
             self._draw_start()
         elif self.state == STATE_PREP:
@@ -802,18 +815,6 @@ class Game:
         if self.notif_t > 0:
             alpha = min(255, int(self.notif_t * 6))
             draw_notification(self.screen, self.notif, 115, color=self.notif_color, alpha=alpha)
-
-        # Мерцание экрана при высоком внимании леса (>0.65)
-        if self.state == STATE_BURNING and self.forest_attention > 0.65:
-            fear_alpha = int(22 * ((self.forest_attention - 0.65) / 0.35) * (0.6 + 0.4 * math.sin(self.time_sec * 8.0)))
-            if fear_alpha > 0:
-                fear_surf = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-                fear_surf.fill((160, 10, 10, fear_alpha))
-                self.screen.blit(fear_surf, (0, 0))
-
-        # Inscryption визуальные эффекты поверх всего
-        draw_vignette(self.screen)
-        draw_grain(self.screen, self.time_sec)
 
         pygame.display.flip()
 
