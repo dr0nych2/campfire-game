@@ -682,6 +682,12 @@ class Game:
         self.time_sec += dt
         self.weather.update(dt)
         self.fire.set_wind(self.weather.wind_strength)
+        self.fire.is_raining = self.weather.is_raining
+
+        # Физическая реакция костра на дождь: пар и шипение от капель
+        if self.weather.is_raining and self.state == STATE_BURNING and self.temperature > 12.0:
+            if random.random() < 0.35:
+                self.fire.trigger_rain_hit()
 
         if self.poker_cooldown > 0:
             self.poker_cooldown -= dt
@@ -778,10 +784,19 @@ class Game:
     def draw(self):
         fire_vis_temp = self.temperature if self.state == STATE_BURNING else 45.0
         att = self.forest_attention if self.state == STATE_BURNING else 0.0
+        # 1. Ночное небо, луна, звёзды и дальние сосны
         self.scenery.draw(self.screen, self.time_sec, self.weather.wind_strength, fire_vis_temp, att)
-        draw_stones_and_base_logs(self.screen, self.selected_mat)
-        self.weather.draw(self.screen)
+
+        # 2. 2.5D Перспективная земля диорамы с честным затуханием света (без жёлтого круга!)
+        self.fire.draw_ground(self.screen)
+
+        # 3. 2.5D Костёр: задние камни -> угли -> пламя -> наклонные дрова -> передние камни -> искры -> пар
         self.fire.draw(self.screen)
+
+        # 4. Погодные частицы
+        self.weather.draw(self.screen)
+
+        # 5. Мягкая подсветка нижних стволов леса
         self.fire.draw_ambient_light(self.screen)
 
         # Виньетка и лёгкое зерно накладываются ТОЛЬКО на игровой мир (под UI!),

@@ -115,19 +115,18 @@ class SoundEngine:
         samples = lowpass(raw, alpha=0.5)
         self._cache['flint_clink'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.35))
 
-        # 7. Подкидывание дров — более глухой и "тяжёлый" удар
-        # Добавлен низкочастотный синус 65 Гц + более длинный env decay
-        thud_len = int(SAMPLE_RATE * 0.18)
+        # 7. Подкидывание дров — реалистичный стук сухого дерева (щелчок волокон + глухой резонанс)
+        thud_len = int(SAMPLE_RATE * 0.22)
         raw = []
         for i in range(thud_len):
             t = i / SAMPLE_RATE
-            env = math.exp(-i / (SAMPLE_RATE * 0.045))  # более длинный decay
-            sine_low  = math.sin(2 * math.pi * 65 * t) * 0.55   # 65 Гц — глухая нота
-            sine_body = math.sin(2 * math.pi * 95 * t) * 0.5
-            noise = random.uniform(-0.4, 0.4) * 0.3
-            raw.append((sine_low + sine_body + noise) * env)
-        samples = lowpass(raw, alpha=0.18)
-        self._cache['wood_drop'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.6))
+            # Первые 10 мс — сухой щелчок удара волокон
+            click = math.exp(-i / (SAMPLE_RATE * 0.005)) * random.uniform(-0.6, 0.6)
+            # Глухой деревянный резонанс (78 и 145 Гц)
+            body = math.exp(-i / (SAMPLE_RATE * 0.038)) * (math.sin(2 * math.pi * 78 * t) * 0.65 + math.sin(2 * math.pi * 145 * t) * 0.35)
+            raw.append(click + body)
+        samples = lowpass(raw, alpha=0.32)
+        self._cache['wood_drop'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.65))
 
         # 8. Ворошение углей (мягкий шорох пепла и угольков)
         poke_len = int(SAMPLE_RATE * 0.18)
@@ -138,14 +137,15 @@ class SoundEngine:
         samples = lowpass(raw, alpha=0.15)
         self._cache['poker_poke'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.35))
 
-        # 9. Выдох / дутьё на угли (двойной lowpass — совсем мягкий)
-        blow_len = int(SAMPLE_RATE * 0.35)
+        # 9. Раздувание углей — мягкий глубокий естественный выдох
+        blow_len = int(SAMPLE_RATE * 0.45)
         raw = []
         for i in range(blow_len):
-            env = math.sin(math.pi * (i / blow_len)) ** 1.5
+            t = i / blow_len
+            env = math.sin(math.pi * (t ** 0.8)) ** 2.0
             raw.append(random.uniform(-1.0, 1.0) * env)
-        samples = lowpass(lowpass(raw, alpha=0.04), alpha=0.06)  # двойной мягкий фильтр
-        self._cache['blow'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.45))
+        samples = lowpass(lowpass(raw, alpha=0.035), alpha=0.055)
+        self._cache['blow'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.48))
 
         # 10. Уютное потрескивание костра — 8 вариантов, более разнообразные
         self._crackles = []
@@ -236,6 +236,16 @@ class SoundEngine:
         # Двойная фильтрация для очень узкой полосы
         samples = lowpass(lowpass(raw, alpha=0.06), alpha=0.09)
         self._cache['wind_rustle'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.28))
+
+        # 14. Шипение пара при дожде на горячие угли (пшшш!)
+        hiss_len = int(SAMPLE_RATE * 0.42)
+        raw = []
+        for i in range(hiss_len):
+            t = i / hiss_len
+            env = math.exp(-t * 3.5)
+            raw.append(random.uniform(-1.0, 1.0) * env)
+        samples = lowpass(raw, alpha=0.35)
+        self._cache['steam_hiss'] = pygame.mixer.Sound(buffer=self._pack_mono(samples, 0.38))
 
     def play(self, sound_name):
         if not self.enabled:
